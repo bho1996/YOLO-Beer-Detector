@@ -1,0 +1,6 @@
+env_birre/
+foto_gruppo/
+foto_debug/
+*.pt
+.DS_Store
+__pycache__/
