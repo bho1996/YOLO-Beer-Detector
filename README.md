@@ -51,7 +51,7 @@ python find_beers.py
 
 The script will automatically download the YOLO-World weights on its first run and process your images. Check the terminal for the final count and the debug_folder for visual results!
 
-🧠 How it works under the hood
+## 🧠 How it works under the hood
 YOLO-World is highly sensitive to text prompts. To prevent the AI from hallucinating beers out of similarly shaped objects, the script sets a custom, mixed vocabulary:
 
 ["plastic cup of beer", "glass of beer", "pint of beer", "dark beer", "water bottle", "ketchup bottle"]
