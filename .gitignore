@@ -4,3 +4,5 @@ foto_debug/
 *.pt
 .DS_Store
 __pycache__/
+photo_folder/
+debug_folder/
