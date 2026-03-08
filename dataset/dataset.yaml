@@ -1,7 +1,0 @@
-path: /Users/giovannifrancolini/Desktop/CercaBirre/dataset
-
-train: images/train
-val: images/train
-
-names:
-  0: beer
