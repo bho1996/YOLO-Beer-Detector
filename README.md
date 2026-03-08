@@ -29,20 +29,25 @@ Make sure you have Python 3 installed. It is highly recommended to run this proj
 
 ### 1. Setup the Environment
 Open your terminal and run:
+
 ```bash
 python3 -m venv env_beer
 source env_beer/bin/activate
+```
 
 2. Install Dependencies
-
+```bash
 pip install ultralytics opencv-python
+```
 
 
 3. Prepare your Photos
 Create a folder named photo_folder in the same directory as the script and put your images inside.
 
 4. Run the Script
+ ```bash
 python find_beers.py
+```
 
 The script will automatically download the YOLO-World weights on its first run and process your images. Check the terminal for the final count and the debug_folder for visual results!
 
