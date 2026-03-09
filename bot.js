@@ -19,7 +19,11 @@ const regex_totale_globale = /\b\d{5,6}\b/g;
 
 const client = new Client({
     authStrategy: new LocalAuth(),
-    puppeteer: { headless: true, args: ['--no-sandbox'] }
+    puppeteer: { 
+        headless: true, 
+        executablePath: '/usr/bin/chromium', // <-- IL BROWSER DEL RASPBERRY
+        args: ['--no-sandbox', '--disable-setuid-sandbox'] 
+    }
 });
 
 client.on('qr', (qr) => {
@@ -111,6 +115,11 @@ client.on('message_create', async msg => {
 
                     if (tipo_file === "video" && testo.match(regex_numeri_birra)) {
                         await inserisciNelDB(db, data_ora, autore, nome_file, 5, "video");
+                        
+                        // --- 🧹 PULIZIA VIDEO ---
+                        fs.unlinkSync(percorso_file);
+                        console.log(`🗑️ Pulizia: Video eliminato dalla RAM.`);
+                        
                     } else if (tipo_file === "foto") {
                         console.log(`🤖 Invio la foto all'Intelligenza Artificiale (YOLO) per l'analisi...`);
                         
@@ -127,6 +136,10 @@ client.on('message_create', async msg => {
                             } else {
                                 console.log(`❌ L'AI ha parlato: FALSO ALLARME (Nessuna birra trovata). Foto ignorata.`);
                             }
+                            
+                            // --- 🧹 PULIZIA FOTO ---
+                            fs.unlinkSync(percorso_file);
+                            console.log(`🗑️ Pulizia: Foto eliminata dalla RAM.`);
                         });
                     }
                 }
