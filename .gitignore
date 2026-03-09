@@ -14,3 +14,7 @@ package-lock.json
 
 # --- File Sensibili/Locali ---
 _chat.txt
+
+# --- Sessione Segreta WhatsApp ---
+.wwebjs_auth/
+.wwebjs_cache/
