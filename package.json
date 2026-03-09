@@ -1,0 +1,18 @@
+{
+  "name": "cercabirre",
+  "version": "1.0.0",
+  "description": "![Python](https://img.shields.io/badge/python-3.9+-blue.svg) ![Ultralytics](https://img.shields.io/badge/Ultralytics-YOLOv8-orange.svg) ![Platform](https://img.shields.io/badge/platform-macOS%20Apple%20Silicon-lightgrey.svg)",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "qrcode-terminal": "^0.12.0",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7",
+    "whatsapp-web.js": "^1.34.6"
+  }
+}

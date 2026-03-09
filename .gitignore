@@ -1,8 +1,16 @@
-env_birre/
-foto_gruppo/
-foto_debug/
-*.pt
-.DS_Store
-__pycache__/
+# --- Cartelle Dati e Media ---
+dataset/
+media/
 photo_folder/
 debug_folder/
+
+# --- Modelli AI Pesanti ---
+*.pt
+
+# --- Ambienti e Dipendenze ---
+env_birre/
+node_modules/
+package-lock.json
+
+# --- File Sensibili/Locali ---
+_chat.txt
