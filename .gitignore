@@ -18,3 +18,7 @@ _chat.txt
 # --- Sessione Segreta WhatsApp ---
 .wwebjs_auth/
 .wwebjs_cache/
+
+
+.env
+photo_folder/

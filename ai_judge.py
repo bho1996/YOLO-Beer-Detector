@@ -42,7 +42,7 @@ def analizza_singola_foto(percorso_foto):
 
         # 🚀 ATTIVAZIONE DEL MODELLO PRO
         response = client.models.generate_content(
-            model='gemini-1.5-pro',
+            model='gemini-2.5-flash',
             contents=[img, prompt],
             config=configurazione
         )
