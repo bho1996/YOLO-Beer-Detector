@@ -16,7 +16,7 @@ const regex_numeri_birra = /\b[1-9]\d{4,5}\b/g;
 // --- VARIABILI DI STATO ---
 let isSyncing = false;
 
-// --- FUNZIONE DB UNIVERSALE (Spostata FUORI per stabilità) ---
+// --- FUNZIONE DB UNIVERSALE ---
 async function inserisciNelDB(dbConnection, d_ora, utente, file, punti, tipo) {
     try {
         await dbConnection.run(
@@ -56,20 +56,25 @@ const client = new Client({
 });
 
 client.on('qr', qr => qrcode.generate(qr, { small: true }));
-
 client.on('ready', () => console.log('✅ Bot Online!'));
 
 client.on('message_create', async msg => {
+    // 🛡️ IL BUTTAFUORI: Se è spazzatura, scartalo subito per evitare crash
+    if (!msg || !msg.id || !msg.from || !msg.id._serialized) return;
+
     try {
-        if (!msg || !msg.from) return;
-        const chat = await msg.getChat();
+        // Tentativo sicuro di ottenere la chat
+        const chat = await msg.getChat().catch(() => null);
+        if (!chat || !chat.name) return;
+        
+        // Filtro Gruppo
         if (chat.name !== NOME_GRUPPO_BERSAGLIO && chat.name !== CHAT_PERSONALE) return;
 
-        let contact = await msg.getContact();
-        let numeroGrezzo = contact.number;
-        let autore = contact.pushname || "Sconosciuto";
-        if (numeroGrezzo) {
-            autore = `+${numeroGrezzo.substring(0, 2)} *** ${numeroGrezzo.slice(-4)}`;
+        // Tentativo sicuro di ottenere il contatto
+        let contact = await msg.getContact().catch(() => null);
+        let autore = "Sconosciuto";
+        if (contact && contact.number) {
+            autore = `+${contact.number.substring(0, 2)} *** ${contact.number.slice(-4)}`;
         }
 
         let testo = msg.body || "";
@@ -81,8 +86,8 @@ client.on('message_create', async msg => {
             console.log(`\n⏳ [RECUPERO] Scansione ultimi ${limite} messaggi...`);
             
             const db = await open({ filename: './1m_beers.db', driver: sqlite3.Database });
-            let messaggi = [];
             
+            let messaggi = [];
             try {
                 messaggi = await chat.fetchMessages({ limit: limite });
                 if (!messaggi || messaggi.length === 0) {
@@ -91,30 +96,27 @@ client.on('message_create', async msg => {
                     return;
                 }
             } catch (errFetch) {
-                console.log("❌ Errore nel fetch dei messaggi:", errFetch.message);
+                console.log("❌ Errore fetch messaggi:", errFetch.message);
                 await db.close();
                 return;
             }
 
-            // Mettiamo in ordine cronologico (dal più vecchio al più nuovo)
             messaggi.reverse();
             let recuperati = 0;
 
             for (let m of messaggi) {
                 try {
-                    // Controlli di base e prevenzione crash su messaggi corrotti
-                    if (!m || !m.id || !m.hasMedia) continue;
+                    // Controlli sicurezza su ogni singolo messaggio recuperato
+                    if (!m || !m.id || !m.id._serialized || !m.hasMedia) continue;
                     
                     let tipo_file = m.type === "image" ? "foto" : m.type === "video" ? "video" : null;
                     if (!tipo_file) continue;
 
                     let nome_file = `WA_${m.timestamp}.${tipo_file === "foto" ? "jpg" : "mp4"}`;
                     
-                    // Controllo se esiste già nel DB
                     const esiste = await db.get('SELECT 1 FROM log_birre WHERE nome_file = ?', [nome_file]);
                     if (esiste) continue;
 
-                    // Tentativo di download sicuro
                     const media = await m.downloadMedia().catch(() => null);
                     if (!media || !media.data) {
                         console.log(`⚠️ Salto ${nome_file}: media non scaricabile.`);
@@ -124,7 +126,6 @@ client.on('message_create', async msg => {
                     let percorso = `${CARTELLA_MEDIA}/${nome_file}`;
                     fs.writeFileSync(percorso, media.data, 'base64');
 
-                    // Recupero contatto sicuro (se fallisce usiamo l'ID mittente grezzo)
                     let mContact = await m.getContact().catch(() => null);
                     let mAutore = "Sconosciuto";
                     if (mContact && mContact.number) {
@@ -133,10 +134,8 @@ client.on('message_create', async msg => {
                         let num = (m.author || m.from).split('@')[0];
                         mAutore = `+${num.substring(0, 2)} *** ${num.slice(-4)}`;
                     }
-                    
                     let mDataOra = new Date(m.timestamp * 1000).toLocaleString('it-IT');
 
-                    // Analisi AI
                     if (tipo_file === "foto") {
                         console.log(`🤖 Invio ${nome_file} all'AI...`);
                         await new Promise(resolve => {
@@ -154,7 +153,6 @@ client.on('message_create', async msg => {
                             });
                         });
                     } else if (tipo_file === "video" && m.body && m.body.match(regex_numeri_birra)) {
-                        console.log(`🎥 Video riconosciuto: ${nome_file}`);
                         await inserisciNelDB(db, mDataOra, mAutore, nome_file, 5, "video");
                         if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
                         recuperati++;
@@ -162,26 +160,44 @@ client.on('message_create', async msg => {
                         if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
                     }
                 } catch (errLoop) {
-                    console.log(`⚠️ Errore imprevisto su un messaggio durante il recupero: ${errLoop.message}`);
-                    // Il 'continue' implicito qui ci fa passare al messaggio successivo senza fermare tutto
+                    console.log(`⚠️ Errore su un messaggio: ${errLoop.message}`);
                 }
             }
             console.log(`🎉 Recupero finito: ${recuperati} birre aggiunte.`);
             await db.close();
-            return; // STOP QUI, evita che lo stesso messaggio venga processato dal blocco "diretta"
+            return;
         }
 
         // 🟡 GESTIONE MESSAGGI IN DIRETTA
         const db = await open({ filename: './1m_beers.db', driver: sqlite3.Database });
 
         if (testo.startsWith("!forza ")) {
-            // ... logica forza (omessa per brevità, inseriscila qui)
+            let parti = testo.split(" ");
+            let punti_forzati = parseInt(parti.pop());
+            let stringa_bersaglio = parti.slice(1).join(" ");
+
+            let soloNumeri = stringa_bersaglio.replace(/\D/g, '');
+            if (soloNumeri.length >= 10) {
+                let prefisso = "+" + soloNumeri.substring(0, 2);
+                let ultime4 = soloNumeri.slice(-4);
+                autore = `${prefisso} *** ${ultime4}`;
+            } else {
+                autore = stringa_bersaglio.trim();
+            }
+
+            console.log(`⚡ [GOD MODE] Forzati ${punti_forzati} punti a ${autore}`);
+            let nome_file_finto = `GodMode_${msg.timestamp}.jpg`;
+            await inserisciNelDB(db, data_ora, autore, nome_file_finto, punti_forzati, "foto");
             await db.close();
             return;
         }
 
         if (msg.hasMedia) {
-            const media = await msg.downloadMedia();
+            const media = await msg.downloadMedia().catch(() => null);
+            if (!media) {
+                await db.close();
+                return;
+            }
             let tipo_file = media.mimetype.includes("image") ? "foto" : media.mimetype.includes("video") ? "video" : null;
             if (tipo_file) {
                 let nome_file = `WA_${msg.timestamp}.${tipo_file === "foto" ? "jpg" : "mp4"}`;
@@ -190,7 +206,7 @@ client.on('message_create', async msg => {
 
                 if (tipo_file === "video" && testo.match(regex_numeri_birra)) {
                     await inserisciNelDB(db, data_ora, autore, nome_file, 5, "video");
-                    fs.unlinkSync(percorso);
+                    if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
                 } else if (tipo_file === "foto") {
                     exec(`./env_birre/bin/python ai_judge.py "${percorso}"`, async (err, stdout) => {
                         const match = stdout.match(/BEERS_FOUND:\s*(\d+)/);
@@ -201,7 +217,7 @@ client.on('message_create', async msg => {
                         if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
                         await db.close();
                     });
-                    return; // Usciamo perché la chiusura del DB è asincrona dentro exec
+                    return; 
                 }
             }
         }
