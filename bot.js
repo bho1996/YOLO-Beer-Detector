@@ -41,6 +41,12 @@ client.on('ready', () => {
     console.log('✅ Bot connesso e AI caricata! In attesa di birre...');
 });
 
+client.on('disconnected', (reason) => {
+    console.log('🔴 ATTENZIONE! Bot disconnesso da WhatsApp! Motivo:', reason);
+    console.log('🔄 Riavvio forzato in corso...');
+    process.exit(1); // Questo uccide il bot, utilissimo se in futuro useremo un gestore che lo riaccende in automatico
+});
+
 let isSyncing = false; 
 
 client.on('message_create', async msg => {
