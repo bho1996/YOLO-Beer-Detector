@@ -18,9 +18,11 @@ const regex_numeri_birra = /\b[1-9]\d{4,5}\b/g;
 
 const client = new Client({
     authStrategy: new LocalAuth(),
-    puppeteer: { 
+puppeteer: { 
         headless: true, 
         executablePath: '/usr/bin/chromium',
+        timeout: 60000,               // timeout generale (ms)
+        protocolTimeout: 60000,        // timeout per le chiamate di protocollo
         args: [
             '--no-sandbox', 
             '--disable-setuid-sandbox',
@@ -28,9 +30,11 @@ const client = new Client({
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
-            '--single-process'
+            '--single-process',
+            '--disable-gpu'             // utile su Raspberry Pi
         ] 
     }
+
 });
 
 client.on('qr', (qr) => {
