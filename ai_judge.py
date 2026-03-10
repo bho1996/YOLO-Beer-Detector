@@ -7,7 +7,7 @@ from PIL import Image
 import re
 
 # 1. Inserisci qui la tua NUOVA API Key
-API_KEY = "AIzaSyBkGr--DtYdXO60FJR9JwBwenxY9rvr7RA"
+API_KEY = "AIzaSyD2Lp0EyGok2wPwxdIkB1dgfp_ttY4EECk"
 client = genai.Client(api_key=API_KEY)
 
 def analizza_singola_foto(percorso_foto):
