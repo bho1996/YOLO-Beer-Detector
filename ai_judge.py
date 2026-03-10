@@ -6,9 +6,8 @@ from google.genai import types
 from PIL import Image
 import re
 
-# 1. INSERISCI QUI LA CHIAVE CHE HAI PRESO SU AI STUDIO
-genai.configure(api_key="AIzaSyBkGr--DtYdXO60FJR9JwBwenxY9rvr7RA")
-
+# 1. Inserisci qui la tua NUOVA API Key
+API_KEY = "AIzaSyBkGr--DtYdXO60FJR9JwBwenxY9rvr7RA"
 client = genai.Client(api_key=API_KEY)
 
 def analizza_singola_foto(percorso_foto):
