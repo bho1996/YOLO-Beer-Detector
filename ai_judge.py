@@ -8,7 +8,7 @@ import re
 from dotenv import load_dotenv
 
 load_dotenv()
-API_KEY = os.getenv("AIzaSyD2Lp0EyGok2wPwxdIkB1dgfp_ttY4EECk")
+API_KEY = os.getenv("GEMINI_API_KEY") 
 client = genai.Client(api_key=API_KEY)
 
 def analizza_singola_foto(percorso_foto):
@@ -41,8 +41,13 @@ def analizza_singola_foto(percorso_foto):
         )
 
         # 🚀 ATTIVAZIONE DEL MODELLO PRO
+<<<<<<< Updated upstream
         response = client.models.generate_content(
             model='gemini-2.5-flash',
+=======
+response = client.models.generate_content(
+            model='gemini-2.5-pro', # <-- Usa 2.5-pro o 2.5-flash
+>>>>>>> Stashed changes
             contents=[img, prompt],
             config=configurazione
         )
