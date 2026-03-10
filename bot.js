@@ -104,13 +104,22 @@ if (!chat || (msg.from !== ID_GRUPPO && msg.from !== ID_PERSONALE)) return;
         const numeriNelTesto = testo.match(/\d{4,6}/g);
         const numeroDichiarato = numeriNelTesto ? parseInt(numeriNelTesto[numeriNelTesto.length - 1]) : null;
 
-        // 🟢 COMANDO RECUPERO STORICO
+// 🟢 COMANDO RECUPERO STORICO
         if (testo.startsWith("!recupera_storico ")) {
             let limite = parseInt(testo.replace("!recupera_storico ", "").trim()) || 50;
-            console.log(`\n⏳ [RECUPERO] Scansione ultimi ${limite} messaggi...`);
+            console.log(`\n⏳ [RECUPERO] Scansione ultimi ${limite} messaggi DEL GRUPPO...`);
             
             const db = await open({ filename: './1m_beers.db', driver: sqlite3.Database });
-            let messaggi = await chat.fetchMessages({ limit: limite }).catch(() => []);
+            
+            // 🎯 IL TRUCCO: peschiamo la cronologia del gruppo, a prescindere da dove scrivi
+            const chatGruppo = await client.getChatById(ID_GRUPPO).catch(() => null);
+            if (!chatGruppo) {
+                console.log("❌ Errore: non riesco a trovare il gruppo in memoria!");
+                await db.close();
+                return;
+            }
+
+            let messaggi = await chatGruppo.fetchMessages({ limit: limite }).catch(() => []);
             
             messaggi.reverse();
             let recuperati = 0;
@@ -131,7 +140,6 @@ if (!chat || (msg.from !== ID_GRUPPO && msg.from !== ID_PERSONALE)) return;
                 let percorso = `${CARTELLA_MEDIA}/${nome_file}`;
                 fs.writeFileSync(percorso, media.data, 'base64');
 
-                // Estrai numero per il messaggio storico
                 const mNumeri = (m.body || "").match(/\d{4,6}/g);
                 const mNumeroDichiarato = mNumeri ? parseInt(mNumeri[mNumeri.length - 1]) : null;
                 let mDataOra = new Date(m.timestamp * 1000).toLocaleString('it-IT');
