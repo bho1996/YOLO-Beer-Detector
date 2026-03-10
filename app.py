@@ -41,7 +41,7 @@ if df.empty:
     st.error("No data found! Looks like the keg is empty. Run `build_db.py` first.")
     st.stop()
 
-df['data_ora_dt'] = pd.to_datetime(df['data_ora'], format='%d/%m/%y, %H:%M', errors='coerce')
+df['data_ora_dt'] = pd.to_datetime(df['data_ora'], format='mixed', dayfirst=True, errors='coerce')
 
 current_db_total = df['punti'].sum()
 ghost_beers = CURRENT_OFFICIAL_TOTAL - current_db_total
