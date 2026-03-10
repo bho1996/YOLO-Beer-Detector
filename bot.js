@@ -83,7 +83,12 @@ client.on('message_create', async msg => {
         if (!msg || !msg.from) return;
         const chat = await msg.getChat().catch(() => null);
         
-        // FILTRO DI INGRESSO (Solo Gruppo o Chat Personale)
+        // 👇 AGGIUNGI QUESTE DUE RIGHE DI DEBUG 👇
+        if (chat) {
+            console.log(`[DEBUG] Messaggio in arrivo da chat: '${chat.name}' (ID: ${msg.from})`);
+        }
+
+        // FILTRO DI INGRESSO
         if (!chat || (chat.name !== NOME_GRUPPO_BERSAGLIO && msg.from !== ID_PERSONALE)) return;
 
         let contact = await msg.getContact().catch(() => null);
