@@ -13,25 +13,25 @@ def analizza_singola_foto(percorso_foto):
     try:
         model = YOLOWorld('yolov8s-world.pt')
         
-        # Classi più ampie e adatte alle foto di WhatsApp (spesso buie o mosse)
+        # Parole SECCHE. Dato che è un gruppo di birre, 
+        # se c'è una bottiglia o un bicchiere, assumiamo sia birra!
         classes_to_search = [
-            "glass of beer", 
-            "bottle of beer", 
-            "can of beer",
-            "plastic cup of beer",
-            "beer"
+            "beer", 
+            "bottle", 
+            "glass",
+            "pint",
+            "can"
         ]
         model.set_classes(classes_to_search)
         
         # Tutte le classi sopra sono valide (indici da 0 a 4)
         beer_indices = [0, 1, 2, 3, 4]
 
-        # Abbassato conf a 0.15 per compensare la compressione di WhatsApp
         results = model.predict(
             percorso_foto, 
-            conf=0.15,        
-            iou=0.20,         
-            agnostic_nms=True, 
+            conf=0.10,          # Modalità "manica larghissima"
+            iou=0.50,           # FONDAMENTALE: permette birre vicine e sovrapposte
+            agnostic_nms=False, # Disattivato per non far scontrare classi diverse
             verbose=False
         )
         
