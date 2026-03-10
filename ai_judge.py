@@ -8,7 +8,7 @@ import re
 from dotenv import load_dotenv
 
 load_dotenv()
-API_KEY = os.getenv("GEMINI_API_KEY")
+API_KEY = os.getenv("AIzaSyD2Lp0EyGok2wPwxdIkB1dgfp_ttY4EECk")
 client = genai.Client(api_key=API_KEY)
 
 def analizza_singola_foto(percorso_foto):
