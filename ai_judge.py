@@ -58,7 +58,8 @@ def analizza_singola_foto(percorso_foto):
             print("BEERS_FOUND: 0")
 
     except Exception as e:
-        # Se c'è un errore (es. rete), restituisce 0 per non far crashare Node.js
+        # Smascheriamo l'errore vero!
+        print(f"ERRORE_NASCOSTO: {e}")
         print("BEERS_FOUND: 0")
 
 if __name__ == "__main__":
