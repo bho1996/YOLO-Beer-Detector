@@ -41,13 +41,12 @@ def analizza_singola_foto(percorso_foto):
         )
 
         # 🚀 ATTIVAZIONE DEL MODELLO PRO
-<<<<<<< Updated upstream
+
         response = client.models.generate_content(
             model='gemini-2.5-flash',
-=======
 response = client.models.generate_content(
             model='gemini-2.5-pro', # <-- Usa 2.5-pro o 2.5-flash
->>>>>>> Stashed changes
+
             contents=[img, prompt],
             config=configurazione
         )
