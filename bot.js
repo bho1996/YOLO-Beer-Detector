@@ -15,7 +15,6 @@ if (!fs.existsSync(CARTELLA_MEDIA)){
 }
 
 const regex_numeri_birra = /\b[1-9]\d{4,5}\b/g; 
-const regex_totale_globale = /\b\d{5,6}\b/g;
 
 const client = new Client({
     authStrategy: new LocalAuth(),
@@ -51,9 +50,9 @@ client.on('message_create', async msg => {
 
         const chat = await msg.getChat();
         
-        // 🛑 IL BUTTAFUORI: Accetta solo il gruppo o te stesso
+        // 🛑 IL BUTTAFUORI
         if (chat.name !== NOME_GRUPPO_BERSAGLIO && chat.name !== CHAT_PERSONALE) {
-            return; // Messaggi di altri ignorati in silenzio
+            return; 
         }
 
         console.log(`\n📬 [EVENTO] Messaggio AUTORIZZATO da: ${msg.from} | Chat: "${chat.name}" | Tipo: ${msg.type}`);
@@ -80,7 +79,7 @@ client.on('message_create', async msg => {
             hour: '2-digit', minute:'2-digit' 
         });
 
-        // Apriamo il DB SUBITO
+        // Apriamo il DB
         const db = await open({ filename: './1m_beers.db', driver: sqlite3.Database });
 
         // 👑 TRUCCO ADMIN (RECUPERO E GOD MODE)
@@ -90,44 +89,26 @@ client.on('message_create', async msg => {
             
         } else if (testo.startsWith("!forza ")) {
             let parti = testo.split(" ");
-            let punti_forzati = parseInt(parti.pop()); // Prende i punti alla fine
-            let stringa_bersaglio = parti.slice(1).join(" "); // Prende quello che sta in mezzo
+            let punti_forzati = parseInt(parti.pop()); 
+            let stringa_bersaglio = parti.slice(1).join(" "); 
             
-            // 🛡️ Maschera automatica del numero Admin
-            let soloNumeri = stringa_bersaglio.replace(/\D/g, ''); // Togli spazi e +
+            let soloNumeri = stringa_bersaglio.replace(/\D/g, ''); 
             if (soloNumeri.length >= 10) { 
                 let prefisso = "+" + soloNumeri.substring(0, 2); 
                 let ultime4 = soloNumeri.slice(-4); 
                 autore = `${prefisso} *** ${ultime4}`; 
             } else {
-                autore = stringa_bersaglio.trim(); // Se è un nome testuale, lo lascia così
+                autore = stringa_bersaglio.trim(); 
             }
 
             console.log(`⚡ [GOD MODE] Forzati ${punti_forzati} punti a ${autore}! Salvo e invio a Streamlit...`);
             
-// Inventiamo un nome file unico usando il timestamp per fregare il blocco duplicati di SQLite
             let nome_file_finto = `GodMode_${msg.timestamp}.jpg`;
-            
-            // Salva ISTANTANEAMENTE usando il nome unico
             await inserisciNelDB(db, data_ora, autore, nome_file_finto, punti_forzati, "foto");
-
-            return; // Fine corsa! Non cerca foto e non fa altro.
+            return; 
         }
-        // 👑 FINE TRUCCO ADMIN
         
-        // 1. AGGIORNA IL TOTALE
-        let matchTotale = testo.match(regex_totale_globale);
-        if (matchTotale) {
-            for (let numStr of matchTotale) {
-                let valore = parseInt(numStr);
-                if (valore >= 17500 && valore <= 30000) {
-                    await db.run("INSERT OR REPLACE INTO config (chiave, valore) VALUES ('OFFICIAL_TOTAL', ?)", valore);
-                    console.log(`🏆 Totale Ufficiale aggiornato a: ${valore}`);
-                }
-            }
-        }
-
-        // 2. GESTIONE MEDIA E AI
+        // 📸 GESTIONE MEDIA E AI
         if (msg.hasMedia) {
             console.log("⏳ Download media in corso...");
             const media = await msg.downloadMedia();
@@ -157,7 +138,6 @@ client.on('message_create', async msg => {
                         console.log(`🗑️ Pulizia: Video eliminato.`);
                         
                     } else if (tipo_file === "foto") {
-                        // Niente più if(salta_ai), qui ci arriva solo se non hai usato !forza
                         console.log(`🤖 Invio la foto all'AI...`);
                         exec(`python ai_judge.py "${percorso_file}"`, async (error, stdout, stderr) => {
                             let birre_trovate = 0;
@@ -183,25 +163,31 @@ client.on('message_create', async msg => {
             await db.close(); 
         }
 
-        // 3. LA FUNZIONE DB 
+        // 🧮 LA FUNZIONE DB (Contabile Universale)
         async function inserisciNelDB(dbConnection, d_ora, utente, file, punti, tipo) {
             try {
                 await dbConnection.run(
                     `INSERT INTO log_birre (data_ora, utente, nome_file, punti, tipo_file) VALUES (?, ?, ?, ?, ?)`,
                     [d_ora, utente, file, punti, tipo]
                 );
-                console.log(`🏅 ASSEGNATI: ${punti} punti a ${utente}!`);
+                
+                await dbConnection.run(
+                    `UPDATE config SET valore = valore + ? WHERE chiave = 'OFFICIAL_TOTAL'`,
+                    [punti]
+                );
+
+                console.log(`🏅 ASSEGNATI: ${punti} punti a ${utente}! Il Totale Globale è salito!`);
                 
                 if (!isSyncing) {
                     isSyncing = true;
                     console.log("☁️ Sincronizzazione in corso...");
-                    exec('git add 1m_beers.db && git commit -m "🤖 Auto-update" && git pull origin main --rebase && git push', (error, stdout, stderr) => {
+                    exec('git add 1m_beers.db && git commit -m "🤖 Auto-update: Punti e Totale aggiornati" && git pull origin main --rebase && git push', (error, stdout, stderr) => {
                         isSyncing = false; 
                         if (error) {
                             console.log("⚠️ Errore Git:", error.message);
                             return;
                         }
-                        console.log("🚀 Classifica aggiornata su Cloud!");
+                        console.log("🚀 Classifica e Totale aggiornati su Cloud!");
                     });
                 } else {
                      console.log("⏳ Sincronizzazione già in coda...");
