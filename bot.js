@@ -6,162 +6,153 @@ const { open } = require('sqlite');
 const { exec } = require('child_process');
 
 // --- CONFIGURAZIONI ---
-const NOME_GRUPPO_BERSAGLIO = "1 million beers 🍻"; // <-- Il nome esatto del gruppo
-const CHAT_PERSONALE = "+39 339 529 2936"; // <-- Il nome esatto della tua chat per la God Mode
-const CARTELLA_MEDIA = "./photo_folder"; 
+const NOME_GRUPPO_BERSAGLIO = "1 million beers 🍻";
+const CHAT_PERSONALE = "+39 339 529 2936";
+const CARTELLA_MEDIA = "./photo_folder";
 
-if (!fs.existsSync(CARTELLA_MEDIA)){
-    fs.mkdirSync(CARTELLA_MEDIA);
-}
+if (!fs.existsSync(CARTELLA_MEDIA)) fs.mkdirSync(CARTELLA_MEDIA);
 
-const regex_numeri_birra = /\b[1-9]\d{4,5}\b/g; 
+const regex_numeri_birra = /\b[1-9]\d{4,5}\b/g;
 
 const client = new Client({
     authStrategy: new LocalAuth(),
-puppeteer: { 
-        headless: true, 
+    puppeteer: {
+        headless: true,
         executablePath: '/usr/bin/chromium',
-        timeout: 60000,               // timeout generale (ms)
-        protocolTimeout: 60000,        // timeout per le chiamate di protocollo
+        timeout: 60000,
+        protocolTimeout: 60000,
         args: [
-            '--no-sandbox', 
+            '--no-sandbox',
             '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage', 
+            '--disable-dev-shm-usage',
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
             '--single-process',
-            '--disable-gpu'             // utile su Raspberry Pi
-        ] 
+            '--disable-gpu'
+        ]
     }
-
 });
 
-client.on('qr', (qr) => {
-    qrcode.generate(qr, {small: true});
-});
+client.on('qr', qr => qrcode.generate(qr, { small: true }));
 
 client.on('ready', () => {
     console.log('✅ Bot connesso e AI caricata! In attesa di birre...');
-    setInterval(() => {
-    console.log("⏱️ Bot ancora attivo, in attesa di messaggi...");
-}, 30000);
-setInterval(async () => {
-    try {
-        const state = await client.getState();
-        console.log(`📡 Stato connessione: ${state}`);
-    } catch (e) {
-        console.log(`📡 Errore nel recuperare stato: ${e.message}`);
-    }
-}, 60000);
+    setInterval(() => console.log("⏱️ Bot ancora attivo, in attesa di messaggi..."), 30000);
+    setInterval(async () => {
+        try {
+            const state = await client.getState();
+            console.log(`📡 Stato connessione: ${state}`);
+        } catch (e) {
+            console.log(`📡 Errore nel recuperare stato: ${e.message}`);
+        }
+    }, 60000);
 });
 
-client.on('disconnected', (reason) => {
-    console.log('🔴 ATTENZIONE! Bot disconnesso da WhatsApp! Motivo:', reason);
-    console.log('🔄 Riavvio forzato in corso...');
-    process.exit(1); // Questo uccide il bot, utilissimo se in futuro useremo un gestore che lo riaccende in automatico
+client.on('disconnected', reason => {
+    console.log('🔴 ATTENZIONE! Bot disconnesso! Motivo:', reason);
+    process.exit(1);
 });
 
-let isSyncing = false; 
+let isSyncing = false;
 
 client.on('message_create', async msg => {
     console.log(`🔥 EVENTO SCATTATO - Da: ${msg.from} - Corpo: ${msg.body.substring(0, 30)}`);
-    
-    try { 
+
+    try {
         if (!msg || !msg.from) return;
 
         const chat = await msg.getChat();
-        
-        // 🛑 IL BUTTAFUORI
-        if (chat.name !== NOME_GRUPPO_BERSAGLIO && chat.name !== CHAT_PERSONALE) {
-            return; 
-        }
+        if (chat.name !== NOME_GRUPPO_BERSAGLIO && chat.name !== CHAT_PERSONALE) return;
 
         console.log(`\n📬 [EVENTO] Messaggio AUTORIZZATO da: ${msg.from} | Chat: "${chat.name}" | Tipo: ${msg.type}`);
 
         let contact;
         try {
             contact = await msg.getContact();
-        } catch (err) {
-            return; 
+        } catch {
+            return;
         }
 
-        let numeroGrezzo = contact.number; 
+        let numeroGrezzo = contact.number;
         let autore = contact.pushname || "Sconosciuto";
-
         if (numeroGrezzo) {
-            let prefisso = "+" + numeroGrezzo.substring(0, 2); 
-            let ultime4 = numeroGrezzo.slice(-4); 
+            let prefisso = "+" + numeroGrezzo.substring(0, 2);
+            let ultime4 = numeroGrezzo.slice(-4);
             autore = `${prefisso} *** ${ultime4}`;
         }
 
         let testo = msg.body || "";
-        let data_ora = new Date(msg.timestamp * 1000).toLocaleString('it-IT', { 
-            day: '2-digit', month: '2-digit', year: '2-digit', 
-            hour: '2-digit', minute:'2-digit' 
+        let data_ora = new Date(msg.timestamp * 1000).toLocaleString('it-IT', {
+            day: '2-digit', month: '2-digit', year: '2-digit',
+            hour: '2-digit', minute: '2-digit'
         });
 
         // Apriamo il DB
         const db = await open({ filename: './1m_beers.db', driver: sqlite3.Database });
 
-        // 👑 TRUCCO ADMIN (RECUPERO E GOD MODE)
-        if (testo.startsWith("!recupera ")) {
-            autore = testo.replace("!recupera ", "").trim();
-            console.log(`🛠️ [ADMIN] Modalità recupero attivata! AI al lavoro per: ${autore}`);
-            
-        } else if (testo.startsWith("!forza ")) {
-            let parti = testo.split(" ");
-            let punti_forzati = parseInt(parti.pop()); 
-            let stringa_bersaglio = parti.slice(1).join(" "); 
-            
-            let soloNumeri = stringa_bersaglio.replace(/\D/g, ''); 
-            if (soloNumeri.length >= 10) { 
-                let prefisso = "+" + soloNumeri.substring(0, 2); 
-                let ultime4 = soloNumeri.slice(-4); 
-                autore = `${prefisso} *** ${ultime4}`; 
-            } else {
-                autore = stringa_bersaglio.trim(); 
-            }
+        // 🧮 FUNZIONE DB (definita subito per essere usata dopo)
+        async function inserisciNelDB(dbConnection, d_ora, utente, file, punti, tipo, shouldClose = true) {
+            try {
+                await dbConnection.run(
+                    `INSERT INTO log_birre (data_ora, utente, nome_file, punti, tipo_file) VALUES (?, ?, ?, ?, ?)`,
+                    [d_ora, utente, file, punti, tipo]
+                );
 
-            console.log(`⚡ [GOD MODE] Forzati ${punti_forzati} punti a ${autore}! Salvo e invio a Streamlit...`);
-            
-            let nome_file_finto = `GodMode_${msg.timestamp}.jpg`;
-            await inserisciNelDB(db, data_ora, autore, nome_file_finto, punti_forzati, "foto");
-            return; 
+                let incrementoReale = (tipo === "video") ? 1 : punti;
+                await dbConnection.run(
+                    `UPDATE config SET valore = valore + ? WHERE chiave = 'OFFICIAL_TOTAL'`,
+                    [incrementoReale]
+                );
+
+                console.log(`🏅 ASSEGNATI: ${punti} punti a ${utente}! Il Totale Globale è salito!`);
+
+                if (!isSyncing) {
+                    isSyncing = true;
+                    console.log("☁️ Sincronizzazione in corso...");
+                    exec('git add 1m_beers.db && git commit -m "🤖 Auto-update" && git pull origin main --rebase && git push', (error) => {
+                        isSyncing = false;
+                        if (error) console.log("⚠️ Errore Git:", error.message);
+                        else console.log("🚀 Aggiornato su Cloud!");
+                    });
+                } else {
+                    console.log("⏳ Sincronizzazione già in coda...");
+                }
+            } catch (err) {
+                console.log("⚠️ Errore DB:", err.message);
+            } finally {
+                if (shouldClose) await dbConnection.close();
+            }
         }
-        // ⏪ MACCHINA DEL TEMPO (Recupero massivo arretrati)
-        else if (testo.startsWith("!recupera_storico ")) {
+
+        // 👑 GESTIONE COMANDI ADMIN
+        if (testo.startsWith("!recupera_storico ")) {
             let limite = parseInt(testo.replace("!recupera_storico ", "").trim()) || 50;
-            console.log(`\n⏳ [MACCHINA DEL TEMPO] Inizio scansione degli ultimi ${limite} messaggi...`);
-            
-            // Peschiamo i vecchi messaggi
-            const messaggi = await chat.fetchMessages({limit: limite});
+            console.log(`\n⏳ [RECUPERO STORICO] Scansione ultimi ${limite} messaggi...`);
+
+            const messaggi = await chat.fetchMessages({ limit: limite });
             let recuperati = 0;
 
             for (let m of messaggi) {
-                // Saltiamo se non ha media o non è un'immagine/video
-                if (!m.hasMedia) continue;
-                if (m.type !== "image" && m.type !== "video") continue;
+                if (!m.hasMedia || (m.type !== "image" && m.type !== "video")) continue;
 
                 let estensione = m.type === "image" ? "jpg" : "mp4";
                 let tipo_file = m.type === "image" ? "foto" : "video";
                 let nome_file = `WA_${m.timestamp}.${estensione}`;
 
-                // 🛡️ CONTROLLO ANTI-DOPPIONE: È già nel DB?
-                const riga_esistente = await db.get('SELECT 1 FROM log_birre WHERE nome_file = ?', [nome_file]);
-                if (riga_esistente) {
-                    console.log(`⏭️ Salto: ${nome_file} già conteggiato.`);
+                const esiste = await db.get('SELECT 1 FROM log_birre WHERE nome_file = ?', [nome_file]);
+                if (esiste) {
+                    console.log(`⏭️ Salto: ${nome_file} già presente.`);
                     continue;
                 }
 
-                console.log(`📥 Download arretrato: ${nome_file}...`);
+                console.log(`📥 Download: ${nome_file}...`);
                 const media = await m.downloadMedia();
                 if (!media) continue;
 
                 let percorso_file = `${CARTELLA_MEDIA}/${nome_file}`;
                 fs.writeFileSync(percorso_file, media.data, 'base64');
 
-                // Formattiamo Autore e Data del vecchio messaggio
                 let mContact = await m.getContact();
                 let numGrezzo = mContact.number;
                 let mAutore = mContact.pushname || "Sconosciuto";
@@ -170,139 +161,112 @@ client.on('message_create', async msg => {
                     let ultime4 = numGrezzo.slice(-4);
                     mAutore = `${prefisso} *** ${ultime4}`;
                 }
-                let mDataOra = new Date(m.timestamp * 1000).toLocaleString('it-IT', { 
-                    day: '2-digit', month: '2-digit', year: '2-digit', 
-                    hour: '2-digit', minute:'2-digit' 
+                let mDataOra = new Date(m.timestamp * 1000).toLocaleString('it-IT', {
+                    day: '2-digit', month: '2-digit', year: '2-digit',
+                    hour: '2-digit', minute: '2-digit'
                 });
 
-                // Analisi AI in coda (uno alla volta per non fondere il Pi 4)
-                if (tipo_file === "foto") {
-                    await new Promise((resolve) => {
-                        console.log(`🤖 Interrogo Gemini per foto arretrata...`);
-                        const { exec } = require('child_process');
-                        exec(`./env_birre/bin/python ai_judge.py "${percorso_file}"`, async (error, stdout, stderr) => {
-                            let birre_trovate = 0;
-                            const match = stdout.match(/BEERS_FOUND:\s*(\d+)/);
-                            if (match) birre_trovate = parseInt(match[1]);
+                let testoMsg = m.body || "";
 
-                            if (birre_trovate > 0) {
-                                console.log(`✅ [RECUPERO] AI ha scovato ${birre_trovate} birre!`);
-                                await inserisciNelDB(db, mDataOra, mAutore, nome_file, birre_trovate, "foto");
+                if (tipo_file === "foto") {
+                    await new Promise(resolve => {
+                        exec(`./env_birre/bin/python ai_judge.py "${percorso_file}"`, async (error, stdout) => {
+                            let birre = 0;
+                            const match = stdout.match(/BEERS_FOUND:\s*(\d+)/);
+                            if (match) birre = parseInt(match[1]);
+
+                            if (birre > 0) {
+                                console.log(`✅ [RECUPERO] Trovate ${birre} birre!`);
+                                await inserisciNelDB(db, mDataOra, mAutore, nome_file, birre, "foto", false);
                                 recuperati++;
                             } else {
-                                console.log(`❌ [RECUPERO] Falso allarme.`);
+                                console.log(`❌ [RECUPERO] Nessuna birra.`);
                             }
                             fs.unlinkSync(percorso_file);
-                            resolve(); // Sblocca il ciclo per passare alla foto successiva
+                            resolve();
                         });
                     });
-                } else if (tipo_file === "video" && m.body && m.body.match(regex_numeri_birra)) {
-                    await inserisciNelDB(db, mDataOra, mAutore, nome_file, 5, "video");
+                } else if (tipo_file === "video" && testoMsg.match(regex_numeri_birra)) {
+                    await inserisciNelDB(db, mDataOra, mAutore, nome_file, 5, "video", false);
                     fs.unlinkSync(percorso_file);
                     recuperati++;
                 } else {
-                    fs.unlinkSync(percorso_file); // Cancella i video senza i numeri
+                    fs.unlinkSync(percorso_file);
                 }
             }
-            console.log(`🎉 [MACCHINA DEL TEMPO] Viaggio concluso. Inseriti ${recuperati} nuovi file nel DB!`);
+            console.log(`🎉 Recuperati ${recuperati} nuovi file.`);
+            await db.close();
             return;
         }
-        
-        // 📸 GESTIONE MEDIA E AI
+        else if (testo.startsWith("!recupera ")) {
+            let target = testo.replace("!recupera ", "").trim();
+            console.log(`🛠️ [ADMIN] Recupero per: ${target}`);
+            await db.close();
+            return;
+        }
+        else if (testo.startsWith("!forza ")) {
+            let parti = testo.split(" ");
+            let punti_forzati = parseInt(parti.pop());
+            let stringa_bersaglio = parti.slice(1).join(" ");
+
+            let soloNumeri = stringa_bersaglio.replace(/\D/g, '');
+            if (soloNumeri.length >= 10) {
+                let prefisso = "+" + soloNumeri.substring(0, 2);
+                let ultime4 = soloNumeri.slice(-4);
+                autore = `${prefisso} *** ${ultime4}`;
+            } else {
+                autore = stringa_bersaglio.trim();
+            }
+
+            console.log(`⚡ [GOD MODE] Forzati ${punti_forzati} punti a ${autore}`);
+            let nome_file_finto = `GodMode_${msg.timestamp}.jpg`;
+            await inserisciNelDB(db, data_ora, autore, nome_file_finto, punti_forzati, "foto");
+            return;
+        }
+
+        // 📸 GESTIONE MEDIA IN DIRETTA
         if (msg.hasMedia) {
             console.log("⏳ Download media in corso...");
             const media = await msg.downloadMedia();
-            
-            if (media) {
-                let tipo_file = "";
-                let estensione = "";
-                
-                if (media.mimetype.includes("image")) {
-                    tipo_file = "foto";
-                    estensione = "jpg";
-                } else if (media.mimetype.includes("video")) {
-                    tipo_file = "video";
-                    estensione = "mp4";
-                }
+            if (!media) return;
 
-                if (tipo_file !== "") {
-                    let nome_file = `WA_${msg.timestamp}.${estensione}`;
-                    let percorso_file = `${CARTELLA_MEDIA}/${nome_file}`;
-                    
-                    fs.writeFileSync(percorso_file, media.data, 'base64');
-                    console.log(`📎 File salvato: ${nome_file}`);
+            let tipo_file = media.mimetype.includes("image") ? "foto" : media.mimetype.includes("video") ? "video" : "";
+            let estensione = tipo_file === "foto" ? "jpg" : tipo_file === "video" ? "mp4" : "";
+            if (!tipo_file) return;
 
-                    if (tipo_file === "video" && testo.match(regex_numeri_birra)) {
-                        await inserisciNelDB(db, data_ora, autore, nome_file, 5, "video");
+            let nome_file = `WA_${msg.timestamp}.${estensione}`;
+            let percorso_file = `${CARTELLA_MEDIA}/${nome_file}`;
+            fs.writeFileSync(percorso_file, media.data, 'base64');
+            console.log(`📎 File salvato: ${nome_file}`);
+
+            if (tipo_file === "video" && testo.match(regex_numeri_birra)) {
+                await inserisciNelDB(db, data_ora, autore, nome_file, 5, "video");
+                fs.unlinkSync(percorso_file);
+                console.log(`🗑️ Video eliminato.`);
+                return;
+            }
+            else if (tipo_file === "foto") {
+                console.log(`🤖 Invio foto all'AI...`);
+                exec(`./env_birre/bin/python ai_judge.py "${percorso_file}"`, async (error, stdout) => {
+                    let birre = 0;
+                    const match = stdout.match(/BEERS_FOUND:\s*(\d+)/);
+                    if (match) birre = parseInt(match[1]);
+
+                    if (birre > 0) {
+                        console.log(`✅ AI: ${birre} birre! 🍺`);
+                        await inserisciNelDB(db, data_ora, autore, nome_file, birre, "foto");
+                    } else {
+                        console.log(`❌ AI: zero birre.`);
                         fs.unlinkSync(percorso_file);
-                        console.log(`🗑️ Pulizia: Video eliminato.`);
-                        
-                    } else if (tipo_file === "foto") {
-                        console.log(`🤖 Invio la foto all'AI...`);
-                            exec(`./env_birre/bin/python ai_judge.py "${percorso_file}"`, async (error, stdout, stderr) => {                                let birre_trovate = 0;
-                            const ai_risposta = stdout.match(/BEERS_FOUND:\s*(\d+)/);
-                            if (ai_risposta) {
-                                birre_trovate = parseInt(ai_risposta[1]);
-                            }
-
-                            if (birre_trovate > 0) {
-                                console.log(`✅ AI: CI SONO ${birre_trovate} BIRRE! 🍺`);
-                                await inserisciNelDB(db, data_ora, autore, nome_file, birre_trovate, "foto");
-                            } else {
-                                console.log(`❌ AI: FALSO ALLARME. Zero birre.`);
-                            }
-                            
-                            fs.unlinkSync(percorso_file);
-                            console.log(`🗑️ Pulizia RAM: ok.`);
-                        });
+                        await db.close(); // chiudi qui perché non c'è stato inserimento
                     }
-                }
+                });
             }
         } else {
-            await db.close(); 
+            await db.close(); // messaggi di testo
         }
 
-        // 🧮 LA FUNZIONE DB (Contabile Universale)
-        async function inserisciNelDB(dbConnection, d_ora, utente, file, punti, tipo) {
-            try {
-                await dbConnection.run(
-                    `INSERT INTO log_birre (data_ora, utente, nome_file, punti, tipo_file) VALUES (?, ?, ?, ?, ?)`,
-                    [d_ora, utente, file, punti, tipo]
-                );
-                
-let incrementoReale = (tipo === "video") ? 1 : punti; 
-
-                await dbConnection.run(
-                    `UPDATE config SET valore = valore + ? WHERE chiave = 'OFFICIAL_TOTAL'`,
-                    [incrementoReale]
-                );
-
-                console.log(`🏅 ASSEGNATI: ${punti} punti a ${utente}! Il Totale Globale è salito!`);
-                
-                if (!isSyncing) {
-                    isSyncing = true;
-                    console.log("☁️ Sincronizzazione in corso...");
-                    exec('git add 1m_beers.db && git commit -m "🤖 Auto-update: Punti e Totale aggiornati" && git pull origin main --rebase && git push', (error, stdout, stderr) => {
-                        isSyncing = false; 
-                        if (error) {
-                            console.log("⚠️ Errore Git:", error.message);
-                            return;
-                        }
-                        console.log("🚀 Classifica e Totale aggiornati su Cloud!");
-                    });
-                } else {
-                     console.log("⏳ Sincronizzazione già in coda...");
-                }
-            } catch (err) {
-                console.log("⚠️ Errore DB intercettato:", err.message);
-            } finally {
-                if (dbConnection) {
-                    await dbConnection.close();
-                }
-            }
-        }
-
-    } catch (erroreImprevisto) { 
+    } catch (erroreImprevisto) {
         console.log("🛡️ Errore imprevisto:", erroreImprevisto.message);
     }
 });
