@@ -57,11 +57,11 @@ client.on('message_create', async msg => {
         if (!msg || !msg.from) return;
 
         const chat = await msg.getChat();
-        
+        console.log(`🔎 [NOME CHAT] Il bot vede la chat come: "${chat.name}"`);
         // Ascolta solo il gruppo bersaglio
-        if (chat.name !== NOME_GRUPPO_BERSAGLIO && chat.name !== "Tu") {
-            return; 
-        }
+        // if (chat.name !== NOME_GRUPPO_BERSAGLIO && chat.name !== "Tu") {
+        //     return; 
+        // }
 
         // Cuscino interno per il contatto
         let contact;
