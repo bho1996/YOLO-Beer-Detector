@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 import sys
 import os
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from PIL import Image
 import re
 
 # 1. INSERISCI QUI LA CHIAVE CHE HAI PRESO SU AI STUDIO
 genai.configure(api_key="AIzaSyBkGr--DtYdXO60FJR9JwBwenxY9rvr7RA")
+
+client = genai.Client(api_key=API_KEY)
 
 def analizza_singola_foto(percorso_foto):
     if not os.path.exists(percorso_foto):
@@ -14,13 +17,8 @@ def analizza_singola_foto(percorso_foto):
         return
 
     try:
-        # Carichiamo la foto (operazione leggerissima per la RAM)
         img = Image.open(percorso_foto)
         
-        # Usiamo il modello Flash (velocissimo)
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        
-        # Il Prompt per il Giudice
         prompt = (
             "Sei un giudice inflessibile in una gara di birre. "
             "Guarda questa foto e dimmi quante birre vedi. "
@@ -28,11 +26,23 @@ def analizza_singola_foto(percorso_foto):
             "Rispondi SOLO con un singolo numero intero (es. 0, 1, 2, 3). Non aggiungere testo."
         )
         
-        # Chiamata all'API
-        response = model.generate_content([prompt, img])
-        testo = response.text.strip()
+        # Chiamata API con il nuovo SDK e i filtri disattivati per le foto nei pub
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=[img, prompt],
+            config=types.GenerateContentConfig(
+                safety_settings=[
+                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE)
+                ]
+            )
+        )
         
-        # Estraiamo il numero per sicurezza (se risponde "Vedo 2 birre" prenderà il "2")
+        testo = response.text.strip()
+        print(f"GEMINI_RAW_RESPONSE: {testo}")
+        
         numeri = re.findall(r'\d+', testo)
         if numeri:
             print(f"BEERS_FOUND: {numeri[0]}")
@@ -40,7 +50,7 @@ def analizza_singola_foto(percorso_foto):
             print("BEERS_FOUND: 0")
 
     except Exception as e:
-        print(f"DEBUG: Errore in AI: {e}", file=sys.stderr)
+        print(f"GEMINI_ERROR: {e}")
         print("BEERS_FOUND: 0")
 
 if __name__ == "__main__":
