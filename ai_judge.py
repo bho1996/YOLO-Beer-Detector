@@ -47,8 +47,9 @@ def analizza_singola_foto(percorso_foto):
             contents=[img, prompt],
             config=configurazione
         )
-        
+     
         testo = response.text.strip()
+        print(f"--- COSA DICE VERAMENTE L'AI ---\n{testo}\n--------------------------------") # AGGIUNGI QUESTA
         
         # Estraiamo il risultato finale
         match = re.search(r'RISULTATO_FINALE:\s*(\d+)', testo)
