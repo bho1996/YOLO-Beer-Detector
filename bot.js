@@ -157,8 +157,8 @@ client.on('message_create', async msg => {
                         
                     } else if (tipo_file === "foto") {
                         console.log(`🤖 Invio la foto all'AI...`);
-                        exec(`python ai_judge.py "${percorso_file}"`, async (error, stdout, stderr) => {
-                            let birre_trovate = 0;
+                            exec(`python3 ai_judge.py "${percorso_file}"`, async (error, stdout, stderr) => {                            
+                                let birre_trovate = 0;
                             const ai_risposta = stdout.match(/BEERS_FOUND:\s*(\d+)/);
                             if (ai_risposta) {
                                 birre_trovate = parseInt(ai_risposta[1]);
