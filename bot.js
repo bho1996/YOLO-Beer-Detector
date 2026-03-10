@@ -6,7 +6,7 @@ const { open } = require('sqlite');
 const { exec } = require('child_process');
 
 // --- CONFIGURAZIONI ---
-const NOME_GRUPPO_BERSAGLIO = "1 million beers 🍻";
+const ID_GRUPPO = "10600113557511@lid";
 // 🚨 USA IL TUO ID ESATTO QUI, SENZA "+" E CON "@c.us" ALLA FINE
 const ID_PERSONALE = "393395292936@c.us"; 
 const CARTELLA_MEDIA = "./photo_folder";
@@ -89,7 +89,7 @@ client.on('message_create', async msg => {
         }
 
         // FILTRO DI INGRESSO
-        if (!chat || (chat.name !== NOME_GRUPPO_BERSAGLIO && msg.from !== ID_PERSONALE)) return;
+if (!chat || (msg.from !== ID_GRUPPO && msg.from !== ID_PERSONALE)) return;
 
         let contact = await msg.getContact().catch(() => null);
         let autore = "Sconosciuto";
