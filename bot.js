@@ -50,12 +50,13 @@ client.on('message_create', async msg => {
         if (!msg || !msg.from) return;
 
         const chat = await msg.getChat();
-        console.log(`\n📬 [EVENTO] Messaggio da: ${msg.from} | Chat riconosciuta: "${chat.name}" | Tipo: ${msg.type}`);
         
         // 🛑 IL BUTTAFUORI: Accetta solo il gruppo o te stesso
         if (chat.name !== NOME_GRUPPO_BERSAGLIO && chat.name !== CHAT_PERSONALE) {
-            return; 
+            return; // Messaggi di altri ignorati in silenzio
         }
+
+        console.log(`\n📬 [EVENTO] Messaggio AUTORIZZATO da: ${msg.from} | Chat: "${chat.name}" | Tipo: ${msg.type}`);
 
         let contact;
         try {
@@ -79,22 +80,36 @@ client.on('message_create', async msg => {
             hour: '2-digit', minute:'2-digit' 
         });
 
-        // 👑 TRUCCO ADMIN (RECUPERO E GOD MODE)
-        let salta_ai = false;
-        let punti_forzati = 0;
+        // Apriamo il DB SUBITO
+        const db = await open({ filename: './1m_beers.db', driver: sqlite3.Database });
 
+        // 👑 TRUCCO ADMIN (RECUPERO E GOD MODE)
         if (testo.startsWith("!recupera ")) {
             autore = testo.replace("!recupera ", "").trim();
             console.log(`🛠️ [ADMIN] Modalità recupero attivata! AI al lavoro per: ${autore}`);
+            
         } else if (testo.startsWith("!forza ")) {
             let parti = testo.split(" ");
-            punti_forzati = parseInt(parti.pop()); 
-            autore = parti.slice(1).join(" ").trim(); 
-            salta_ai = true;
-            console.log(`⚡ [GOD MODE] Forzati ${punti_forzati} punti a ${autore}! Salto l'AI.`);
-        }
+            let punti_forzati = parseInt(parti.pop()); // Prende i punti alla fine
+            let stringa_bersaglio = parti.slice(1).join(" "); // Prende quello che sta in mezzo
+            
+            // 🛡️ Maschera automatica del numero Admin
+            let soloNumeri = stringa_bersaglio.replace(/\D/g, ''); // Togli spazi e +
+            if (soloNumeri.length >= 10) { 
+                let prefisso = "+" + soloNumeri.substring(0, 2); 
+                let ultime4 = soloNumeri.slice(-4); 
+                autore = `${prefisso} *** ${ultime4}`; 
+            } else {
+                autore = stringa_bersaglio.trim(); // Se è un nome testuale, lo lascia così
+            }
 
-        const db = await open({ filename: './1m_beers.db', driver: sqlite3.Database });
+            console.log(`⚡ [GOD MODE] Forzati ${punti_forzati} punti a ${autore}! Salvo e invio a Streamlit...`);
+            
+            // Salva ISTANTANEAMENTE senza aver bisogno di foto e chiude il DB
+            await inserisciNelDB(db, data_ora, autore, "God_Mode_Manuale", punti_forzati, "foto");
+            return; // Fine corsa! Non cerca foto e non fa altro.
+        }
+        // 👑 FINE TRUCCO ADMIN
         
         // 1. AGGIORNA IL TOTALE
         let matchTotale = testo.match(regex_totale_globale);
@@ -138,31 +153,25 @@ client.on('message_create', async msg => {
                         console.log(`🗑️ Pulizia: Video eliminato.`);
                         
                     } else if (tipo_file === "foto") {
-                        if (salta_ai) {
-                            console.log(`⚡ Eseguo ordine del capo: Assegno ${punti_forzati} punti!`);
-                            await inserisciNelDB(db, data_ora, autore, nome_file, punti_forzati, "foto");
+                        // Niente più if(salta_ai), qui ci arriva solo se non hai usato !forza
+                        console.log(`🤖 Invio la foto all'AI...`);
+                        exec(`python ai_judge.py "${percorso_file}"`, async (error, stdout, stderr) => {
+                            let birre_trovate = 0;
+                            const ai_risposta = stdout.match(/BEERS_FOUND:\s*(\d+)/);
+                            if (ai_risposta) {
+                                birre_trovate = parseInt(ai_risposta[1]);
+                            }
+
+                            if (birre_trovate > 0) {
+                                console.log(`✅ AI: CI SONO ${birre_trovate} BIRRE! 🍺`);
+                                await inserisciNelDB(db, data_ora, autore, nome_file, birre_trovate, "foto");
+                            } else {
+                                console.log(`❌ AI: FALSO ALLARME. Zero birre.`);
+                            }
+                            
                             fs.unlinkSync(percorso_file);
                             console.log(`🗑️ Pulizia RAM: ok.`);
-                        } else {
-                            console.log(`🤖 Invio la foto all'AI...`);
-                            exec(`python ai_judge.py "${percorso_file}"`, async (error, stdout, stderr) => {
-                                let birre_trovate = 0;
-                                const ai_risposta = stdout.match(/BEERS_FOUND:\s*(\d+)/);
-                                if (ai_risposta) {
-                                    birre_trovate = parseInt(ai_risposta[1]);
-                                }
-
-                                if (birre_trovate > 0) {
-                                    console.log(`✅ AI: CI SONO ${birre_trovate} BIRRE! 🍺`);
-                                    await inserisciNelDB(db, data_ora, autore, nome_file, birre_trovate, "foto");
-                                } else {
-                                    console.log(`❌ AI: FALSO ALLARME. Zero birre.`);
-                                }
-                                
-                                fs.unlinkSync(percorso_file);
-                                console.log(`🗑️ Pulizia RAM: ok.`);
-                            });
-                        }
+                        });
                     }
                 }
             }
@@ -170,7 +179,7 @@ client.on('message_create', async msg => {
             await db.close(); 
         }
 
-        // 3. LA FUNZIONE DB (Messa dentro al blocco try principale per evitare errori di scope)
+        // 3. LA FUNZIONE DB 
         async function inserisciNelDB(dbConnection, d_ora, utente, file, punti, tipo) {
             try {
                 await dbConnection.run(
@@ -196,7 +205,6 @@ client.on('message_create', async msg => {
             } catch (err) {
                 console.log("⚠️ Errore salvataggio (forse duplicato?).");
             } finally {
-                // Solo se il DB è ancora aperto
                 if (dbConnection) {
                     await dbConnection.close();
                 }
