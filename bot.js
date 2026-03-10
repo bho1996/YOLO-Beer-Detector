@@ -37,6 +37,7 @@ client.on('ready', () => {
 let isSyncing = false; // Il semaforo per Git
 
 client.on('message_create', async msg => {
+    console.log(`\n📬 [DEBUG ASSOLUTO] Qualcosa si è mosso! Messaggio da: ${msg.from} - Tipo: ${msg.type}`);
     try { // <-- IL CUSCINO GLOBALE INIZIA QUI
         
         // Filtro di sicurezza immediato: se è roba strana, ignorala
