@@ -21,8 +21,21 @@ const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: { 
         headless: true, 
-        executablePath: '/usr/bin/chromium', // <-- IL BROWSER DEL RASPBERRY
-        args: ['--no-sandbox', '--disable-setuid-sandbox'] 
+        executablePath: '/usr/bin/chromium',
+        args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage', // 🛡️ FONDAMENTALE SUL RASPBERRY: Evita il freeze silenzioso
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process'
+        ] 
+    },
+    // 🛡️ ANTI-CRASH WHATSAPP: Forza una versione web stabile e testata
+    webVersionCache: {
+        type: 'remote',
+        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
     }
 });
 
