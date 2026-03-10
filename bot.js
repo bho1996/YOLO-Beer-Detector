@@ -6,7 +6,7 @@ const { open } = require('sqlite');
 const { exec } = require('child_process');
 
 // --- CONFIGURAZIONI ---
-const ID_GRUPPO = "10600113557511@lid";
+const ID_GRUPPO = "120363420647117056@g.us";
 // 🚨 USA IL TUO ID ESATTO QUI, SENZA "+" E CON "@c.us" ALLA FINE
 const ID_PERSONALE = "393395292936@c.us"; 
 const CARTELLA_MEDIA = "./photo_folder";
