@@ -193,9 +193,11 @@ client.on('message_create', async msg => {
                     [d_ora, utente, file, punti, tipo]
                 );
                 
+let incrementoReale = (tipo === "video") ? 1 : punti; 
+
                 await dbConnection.run(
                     `UPDATE config SET valore = valore + ? WHERE chiave = 'OFFICIAL_TOTAL'`,
-                    [punti]
+                    [incrementoReale]
                 );
 
                 console.log(`🏅 ASSEGNATI: ${punti} punti a ${utente}! Il Totale Globale è salito!`);
