@@ -129,6 +129,84 @@ client.on('message_create', async msg => {
             await inserisciNelDB(db, data_ora, autore, nome_file_finto, punti_forzati, "foto");
             return; 
         }
+        // ⏪ MACCHINA DEL TEMPO (Recupero massivo arretrati)
+        else if (testo.startsWith("!recupera_storico ")) {
+            let limite = parseInt(testo.replace("!recupera_storico ", "").trim()) || 50;
+            console.log(`\n⏳ [MACCHINA DEL TEMPO] Inizio scansione degli ultimi ${limite} messaggi...`);
+            
+            // Peschiamo i vecchi messaggi
+            const messaggi = await chat.fetchMessages({limit: limite});
+            let recuperati = 0;
+
+            for (let m of messaggi) {
+                // Saltiamo se non ha media o non è un'immagine/video
+                if (!m.hasMedia) continue;
+                if (m.type !== "image" && m.type !== "video") continue;
+
+                let estensione = m.type === "image" ? "jpg" : "mp4";
+                let tipo_file = m.type === "image" ? "foto" : "video";
+                let nome_file = `WA_${m.timestamp}.${estensione}`;
+
+                // 🛡️ CONTROLLO ANTI-DOPPIONE: È già nel DB?
+                const riga_esistente = await db.get('SELECT 1 FROM log_birre WHERE nome_file = ?', [nome_file]);
+                if (riga_esistente) {
+                    console.log(`⏭️ Salto: ${nome_file} già conteggiato.`);
+                    continue;
+                }
+
+                console.log(`📥 Download arretrato: ${nome_file}...`);
+                const media = await m.downloadMedia();
+                if (!media) continue;
+
+                let percorso_file = `${CARTELLA_MEDIA}/${nome_file}`;
+                fs.writeFileSync(percorso_file, media.data, 'base64');
+
+                // Formattiamo Autore e Data del vecchio messaggio
+                let mContact = await m.getContact();
+                let numGrezzo = mContact.number;
+                let mAutore = mContact.pushname || "Sconosciuto";
+                if (numGrezzo) {
+                    let prefisso = "+" + numGrezzo.substring(0, 2);
+                    let ultime4 = numGrezzo.slice(-4);
+                    mAutore = `${prefisso} *** ${ultime4}`;
+                }
+                let mDataOra = new Date(m.timestamp * 1000).toLocaleString('it-IT', { 
+                    day: '2-digit', month: '2-digit', year: '2-digit', 
+                    hour: '2-digit', minute:'2-digit' 
+                });
+
+                // Analisi AI in coda (uno alla volta per non fondere il Pi 4)
+                if (tipo_file === "foto") {
+                    await new Promise((resolve) => {
+                        console.log(`🤖 Interrogo Gemini per foto arretrata...`);
+                        const { exec } = require('child_process');
+                        exec(`./env_birre/bin/python ai_judge.py "${percorso_file}"`, async (error, stdout, stderr) => {
+                            let birre_trovate = 0;
+                            const match = stdout.match(/BEERS_FOUND:\s*(\d+)/);
+                            if (match) birre_trovate = parseInt(match[1]);
+
+                            if (birre_trovate > 0) {
+                                console.log(`✅ [RECUPERO] AI ha scovato ${birre_trovate} birre!`);
+                                await inserisciNelDB(db, mDataOra, mAutore, nome_file, birre_trovate, "foto");
+                                recuperati++;
+                            } else {
+                                console.log(`❌ [RECUPERO] Falso allarme.`);
+                            }
+                            fs.unlinkSync(percorso_file);
+                            resolve(); // Sblocca il ciclo per passare alla foto successiva
+                        });
+                    });
+                } else if (tipo_file === "video" && m.body && m.body.match(regex_numeri_birra)) {
+                    await inserisciNelDB(db, mDataOra, mAutore, nome_file, 5, "video");
+                    fs.unlinkSync(percorso_file);
+                    recuperati++;
+                } else {
+                    fs.unlinkSync(percorso_file); // Cancella i video senza i numeri
+                }
+            }
+            console.log(`🎉 [MACCHINA DEL TEMPO] Viaggio concluso. Inseriti ${recuperati} nuovi file nel DB!`);
+            return;
+        }
         
         // 📸 GESTIONE MEDIA E AI
         if (msg.hasMedia) {
