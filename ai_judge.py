@@ -11,19 +11,24 @@ def analizza_singola_foto(percorso_foto):
         return
 
     try:
-        # Carica il modello YOLOv8n (viene scaricato automaticamente la prima volta)
-        model = YOLO('yolov8n.pt')
+        # UPGRADE: Passiamo dal modello "nano" al modello "small" (s)
+        # È molto più preciso con le foto compresse da WhatsApp!
+        model = YOLO('yolov8s.pt') 
         
-        # Inferenza con parametri ottimizzati per Raspberry Pi
+        # Inferenza con "Raggi X" attivati
         results = model.predict(
             percorso_foto,
-            imgsz=640,           # risoluzione ridotta per velocità
-            conf=0.15,           # soglia di confidenza (regola se necessario)
-            iou=0.5,
-            verbose=False
+            imgsz=640,           
+            conf=0.15,           # Soglia di confidenza bassa per catturare più oggetti
+            iou=0.4,             # Evita di contare due volte la stessa birra se i quadrati si sovrappongono
+            verbose=False,
+            save=True,           # <-- MAGIA! Salva l'immagine analizzata
+            project="debug_ai",  # Crea una cartella chiamata "debug_ai"
+            name="viste",        # Dentro ci saranno le foto con i riquadri
+            exist_ok=True
         )
         
-        # Classi COCO di interesse: 39=bottle, 40=wine glass, 41=cup
+        # Classi COCO: 39=bottiglia, 40=bicchiere di vino (spesso confuso con pinta), 41=tazza/boccale
         beer_classes = [39, 40, 41]
         beers_found = 0
         
@@ -34,9 +39,6 @@ def analizza_singola_foto(percorso_foto):
                 beers_found += 1
         
         print(f"BEERS_FOUND: {beers_found}")
-        
-        # Debug opzionale (commenta in produzione)
-        # print(f"DEBUG: {len(results[0].boxes)} boxes trovate", file=sys.stderr)
 
     except Exception as e:
         print(f"DEBUG: Errore in AI: {e}", file=sys.stderr)
