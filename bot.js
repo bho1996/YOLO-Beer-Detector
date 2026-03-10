@@ -39,6 +39,17 @@ client.on('qr', (qr) => {
 
 client.on('ready', () => {
     console.log('✅ Bot connesso e AI caricata! In attesa di birre...');
+    setInterval(() => {
+    console.log("⏱️ Bot ancora attivo, in attesa di messaggi...");
+}, 30000);
+setInterval(async () => {
+    try {
+        const state = await client.getState();
+        console.log(`📡 Stato connessione: ${state}`);
+    } catch (e) {
+        console.log(`📡 Errore nel recuperare stato: ${e.message}`);
+    }
+}, 60000);
 });
 
 client.on('disconnected', (reason) => {
