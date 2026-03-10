@@ -58,19 +58,19 @@ const client = new Client({
 client.on('qr', qr => qrcode.generate(qr, { small: true }));
 client.on('ready', () => console.log('✅ Bot Online!'));
 
+// Funzione per far "respirare" l'API di Google
+const ritardo = ms => new Promise(res => setTimeout(res, ms));
+
 client.on('message_create', async msg => {
-    // 🛡️ IL BUTTAFUORI: Se è spazzatura, scartalo subito per evitare crash
+    // 🛡️ IL BUTTAFUORI: Se è spazzatura, scartalo subito
     if (!msg || !msg.id || !msg.from || !msg.id._serialized) return;
 
     try {
-        // Tentativo sicuro di ottenere la chat
         const chat = await msg.getChat().catch(() => null);
         if (!chat || !chat.name) return;
         
-        // Filtro Gruppo
         if (chat.name !== NOME_GRUPPO_BERSAGLIO && chat.name !== CHAT_PERSONALE) return;
 
-        // Tentativo sicuro di ottenere il contatto
         let contact = await msg.getContact().catch(() => null);
         let autore = "Sconosciuto";
         if (contact && contact.number) {
@@ -106,7 +106,6 @@ client.on('message_create', async msg => {
 
             for (let m of messaggi) {
                 try {
-                    // Controlli sicurezza su ogni singolo messaggio recuperato
                     if (!m || !m.id || !m.id._serialized || !m.hasMedia) continue;
                     
                     let tipo_file = m.type === "image" ? "foto" : m.type === "video" ? "video" : null;
@@ -118,10 +117,7 @@ client.on('message_create', async msg => {
                     if (esiste) continue;
 
                     const media = await m.downloadMedia().catch(() => null);
-                    if (!media || !media.data) {
-                        console.log(`⚠️ Salto ${nome_file}: media non scaricabile.`);
-                        continue;
-                    }
+                    if (!media || !media.data) continue;
 
                     let percorso = `${CARTELLA_MEDIA}/${nome_file}`;
                     fs.writeFileSync(percorso, media.data, 'base64');
@@ -137,9 +133,15 @@ client.on('message_create', async msg => {
                     let mDataOra = new Date(m.timestamp * 1000).toLocaleString('it-IT');
 
                     if (tipo_file === "foto") {
+                        console.log(`⏳ Pausa di 5 secondi per limiti Google API...`);
+                        await ritardo(5000); // <-- IL SEGRETO È QUI: 5 SECONDI DI PAUSA
+                        
                         console.log(`🤖 Invio ${nome_file} all'AI...`);
                         await new Promise(resolve => {
-                            exec(`./env_birre/bin/python ai_judge.py "${percorso}"`, async (err, stdout) => {
+                            // Aggiunto "stderr" per leggere i veri pensieri di Gemini
+                            exec(`./env_birre/bin/python ai_judge.py "${percorso}"`, async (err, stdout, stderr) => {
+                                if (stderr) console.log(`🔍 [DEBUG AI]: ${stderr.trim()}`); // Stampiamo eventuali errori API
+                                
                                 const match = stdout.match(/BEERS_FOUND:\s*(\d+)/);
                                 let birre = match ? parseInt(match[1]) : 0;
                                 if (birre > 0) {
@@ -208,7 +210,9 @@ client.on('message_create', async msg => {
                     await inserisciNelDB(db, data_ora, autore, nome_file, 5, "video");
                     if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
                 } else if (tipo_file === "foto") {
-                    exec(`./env_birre/bin/python ai_judge.py "${percorso}"`, async (err, stdout) => {
+                    exec(`./env_birre/bin/python ai_judge.py "${percorso}"`, async (err, stdout, stderr) => {
+                        if (stderr) console.log(`🔍 [DEBUG AI]: ${stderr.trim()}`);
+                        
                         const match = stdout.match(/BEERS_FOUND:\s*(\d+)/);
                         let birre = match ? parseInt(match[1]) : 0;
                         if (birre > 0) {
