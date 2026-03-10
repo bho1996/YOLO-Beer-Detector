@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 import sys
 import os
+import re
 from google import genai
 from google.genai import types
 from PIL import Image
-import re
 from dotenv import load_dotenv
 
+# Carica la chiave segreta dal file .env
 load_dotenv()
-API_KEY = os.getenv("GEMINI_API_KEY") 
-client = genai.Client(api_key=API_KEY)
+API_KEY = os.getenv("GEMINI_API_KEY")
 
 def analizza_singola_foto(percorso_foto):
     if not os.path.exists(percorso_foto):
@@ -17,21 +17,22 @@ def analizza_singola_foto(percorso_foto):
         return
 
     try:
+        client = genai.Client(api_key=API_KEY)
         img = Image.open(percorso_foto).convert("RGB")
         
-        # PROMPT DA INVESTIGATORE (Sfruttiamo l'intelligenza del PRO)
+        # PROMPT DA INVESTIGATORE
         prompt = (
             "Sei un esperto sommelier e giudice di gara. Guarda attentamente questa immagine. "
             "Fai una breve indagine visiva: descrivi cosa vedi. Cerca tavoli, mani, e soprattutto contenitori "
             "(bicchieri, boccali, pinte, bottiglie anche chiuse, lattine di birra). "
             "Cerca dettagli come liquido ambrato o dorato, schiuma, loghi di birra o boccali da pub. "
-            "Dopo aver descritto la scena, conta le birre. "
+            "Dopo aver descritto la scena, conta le birre valide. "
             "Infine, nell'ultimissima riga della tua risposta, devi scrivere ESATTAMENTE e SOLO: "
             "'RISULTATO_FINALE: X' (dove X è il numero totale intero di birre trovate, oppure 0)."
         )
         
         configurazione = types.GenerateContentConfig(
-            temperature=0.2, # Molto analitico e poco fantasioso
+            temperature=0.2, 
             safety_settings=[
                 types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                 types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
@@ -40,23 +41,16 @@ def analizza_singola_foto(percorso_foto):
             ]
         )
 
-        # 🚀 ATTIVAZIONE DEL MODELLO PRO
-
+        # 🚀 ATTIVAZIONE DEL MODELLO
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
-response = client.models.generate_content(
-            model='gemini-2.5-pro', # <-- Usa 2.5-pro o 2.5-flash
-
+            model='gemini-2.5-pro',
             contents=[img, prompt],
             config=configurazione
         )
         
         testo = response.text.strip()
         
-        # Stampiamo il ragionamento dell'AI, utile se vogliamo fare debug dal terminale
-        print(f"DEBUG_PENSIERO_AI:\n{testo}")
-        
-        # Estraiamo il risultato finale in modo chirurgico
+        # Estraiamo il risultato finale
         match = re.search(r'RISULTATO_FINALE:\s*(\d+)', testo)
         if match:
             print(f"BEERS_FOUND: {match.group(1)}")
@@ -64,9 +58,11 @@ response = client.models.generate_content(
             print("BEERS_FOUND: 0")
 
     except Exception as e:
-        print(f"GEMINI_ERROR: {e}")
+        # Se c'è un errore (es. rete), restituisce 0 per non far crashare Node.js
         print("BEERS_FOUND: 0")
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         analizza_singola_foto(sys.argv[1])
+    else:
+        print("BEERS_FOUND: 0")
