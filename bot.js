@@ -6,7 +6,7 @@ const { open } = require('sqlite');
 const { exec } = require('child_process');
 
 // --- CONFIGURAZIONI ---
-const NOME_GRUPPO_BERSAGLIO = "I kenioti 🫥"; // <-- Il nome esatto del gruppo
+const NOME_GRUPPO_BERSAGLIO = "1 million beers 🍻"; // <-- Il nome esatto del gruppo
 const CHAT_PERSONALE = "+39 339 529 2936"; // <-- Il nome esatto della tua chat per la God Mode
 const CARTELLA_MEDIA = "./photo_folder"; 
 
