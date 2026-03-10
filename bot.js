@@ -82,15 +82,24 @@ client.on('message_create', async msg => {
             autore = `${prefisso} *** ${ultime4}`;
         }
 
+// ... (maschera del numero già presente) ...
+
         let testo = msg.body || "";
         let data_ora = new Date(msg.timestamp * 1000).toLocaleString('it-IT', { 
             day: '2-digit', month: '2-digit', year: '2-digit', 
             hour: '2-digit', minute:'2-digit' 
         });
 
-        // Apriamo il DB
-        const db = await open({ filename: './1m_beers.db', driver: sqlite3.Database });
+        // 👑 INIZIO TRUCCO ADMIN (BACKDOOR)
+        // Se il messaggio inizia con !recupera, ignoriamo chi l'ha mandato e usiamo il nome indicato
+        if (testo.startsWith("!recupera ")) {
+            autore = testo.replace("!recupera ", "").trim();
+            console.log(`🛠️ [ADMIN] Modalità recupero attivata! I punti andranno a: ${autore}`);
+        }
+        // 👑 FINE TRUCCO ADMIN
 
+        // Apriamo il DB...
+        const db = await open({ filename: './1m_beers.db', driver: sqlite3.Database });
         // 1. AGGIORNA IL TOTALE UFFICIALE
         let matchTotale = testo.match(regex_totale_globale);
         if (matchTotale) {
