@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 import sys
 import os
-from ultralytics import YOLO
-import logging
-logging.getLogger("ultralytics").setLevel(logging.WARNING)
+import google.generativeai as genai
+from PIL import Image
+import re
+
+# 1. INSERISCI QUI LA CHIAVE CHE HAI PRESO SU AI STUDIO
+genai.configure(api_key="AIzaSyBkGr--DtYdXO60FJR9JwBwenxY9rvr7RA")
 
 def analizza_singola_foto(percorso_foto):
     if not os.path.exists(percorso_foto):
@@ -11,34 +14,30 @@ def analizza_singola_foto(percorso_foto):
         return
 
     try:
-        # UPGRADE: Passiamo dal modello "nano" al modello "small" (s)
-        # È molto più preciso con le foto compresse da WhatsApp!
-        model = YOLO('yolov8s.pt') 
+        # Carichiamo la foto (operazione leggerissima per la RAM)
+        img = Image.open(percorso_foto)
         
-        # Inferenza con "Raggi X" attivati
-        results = model.predict(
-            percorso_foto,
-            imgsz=640,           
-            conf=0.15,           # Soglia di confidenza bassa per catturare più oggetti
-            iou=0.4,             # Evita di contare due volte la stessa birra se i quadrati si sovrappongono
-            verbose=False,
-            save=True,           # <-- MAGIA! Salva l'immagine analizzata
-            project="debug_ai",  # Crea una cartella chiamata "debug_ai"
-            name="viste",        # Dentro ci saranno le foto con i riquadri
-            exist_ok=True
+        # Usiamo il modello Flash (velocissimo)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        # Il Prompt per il Giudice
+        prompt = (
+            "Sei un giudice inflessibile in una gara di birre. "
+            "Guarda questa foto e dimmi quante birre vedi. "
+            "Conta pinte, boccali, bottiglie di birra o bicchieri contenenti palesemente birra. "
+            "Rispondi SOLO con un singolo numero intero (es. 0, 1, 2, 3). Non aggiungere testo."
         )
         
-        # Classi COCO: 39=bottiglia, 40=bicchiere di vino (spesso confuso con pinta), 41=tazza/boccale
-        beer_classes = [39, 40, 41]
-        beers_found = 0
+        # Chiamata all'API
+        response = model.generate_content([prompt, img])
+        testo = response.text.strip()
         
-        # Conta gli oggetti rilevati
-        for box in results[0].boxes:
-            cls = int(box.cls[0])
-            if cls in beer_classes:
-                beers_found += 1
-        
-        print(f"BEERS_FOUND: {beers_found}")
+        # Estraiamo il numero per sicurezza (se risponde "Vedo 2 birre" prenderà il "2")
+        numeri = re.findall(r'\d+', testo)
+        if numeri:
+            print(f"BEERS_FOUND: {numeri[0]}")
+        else:
+            print("BEERS_FOUND: 0")
 
     except Exception as e:
         print(f"DEBUG: Errore in AI: {e}", file=sys.stderr)
