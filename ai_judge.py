@@ -17,7 +17,7 @@ def analizza_singola_foto(percorso_foto):
         # Inferenza con parametri ottimizzati per Raspberry Pi
         results = model.predict(
             percorso_foto,
-            imgsz=320,           # risoluzione ridotta per velocità
+            imgsz=640,           # risoluzione ridotta per velocità
             conf=0.15,           # soglia di confidenza (regola se necessario)
             iou=0.5,
             verbose=False
