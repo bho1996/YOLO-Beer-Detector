@@ -50,6 +50,7 @@ client.on('disconnected', (reason) => {
 let isSyncing = false; 
 
 client.on('message_create', async msg => {
+    console.log(`🔥 EVENTO SCATTATO - Da: ${msg.from} - Corpo: ${msg.body.substring(0, 30)}`);
     
     try { 
         if (!msg || !msg.from) return;
