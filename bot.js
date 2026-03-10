@@ -105,8 +105,12 @@ client.on('message_create', async msg => {
 
             console.log(`⚡ [GOD MODE] Forzati ${punti_forzati} punti a ${autore}! Salvo e invio a Streamlit...`);
             
-            // Salva ISTANTANEAMENTE senza aver bisogno di foto e chiude il DB
-            await inserisciNelDB(db, data_ora, autore, "God_Mode_Manuale", punti_forzati, "foto");
+// Inventiamo un nome file unico usando il timestamp per fregare il blocco duplicati di SQLite
+            let nome_file_finto = `GodMode_${msg.timestamp}.jpg`;
+            
+            // Salva ISTANTANEAMENTE usando il nome unico
+            await inserisciNelDB(db, data_ora, autore, nome_file_finto, punti_forzati, "foto");
+
             return; // Fine corsa! Non cerca foto e non fa altro.
         }
         // 👑 FINE TRUCCO ADMIN
@@ -203,7 +207,7 @@ client.on('message_create', async msg => {
                      console.log("⏳ Sincronizzazione già in coda...");
                 }
             } catch (err) {
-                console.log("⚠️ Errore salvataggio (forse duplicato?).");
+                console.log("⚠️ Errore DB intercettato:", err.message);
             } finally {
                 if (dbConnection) {
                     await dbConnection.close();
