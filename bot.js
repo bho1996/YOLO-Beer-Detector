@@ -75,61 +75,85 @@ client.on('message_create', async msg => {
         let testo = msg.body || "";
         let data_ora = new Date(msg.timestamp * 1000).toLocaleString('it-IT');
 
-        // 🟢 COMANDO RECUPERO STORICO
+// 🟢 COMANDO RECUPERO STORICO CORAZZATO
         if (testo.startsWith("!recupera_storico ")) {
             let limite = parseInt(testo.replace("!recupera_storico ", "").trim()) || 50;
-            console.log(`⏳ Scansione ultimi ${limite} messaggi...`);
+            console.log(`⏳ [DEBUG] Avvio scansione di ${limite} messaggi...`);
             
             const db = await open({ filename: './1m_beers.db', driver: sqlite3.Database });
-            const messaggi = await chat.fetchMessages({ limit: limite });
+            let messaggi = [];
+            
+            try {
+                messaggi = await chat.fetchMessages({ limit: limite });
+            } catch (e) {
+                console.log("❌ Errore critico nel fetch di WhatsApp:", e.message);
+                await db.close();
+                return;
+            }
+
             let recuperati = 0;
+            // Invertiamo per andare in ordine cronologico
+            messaggi.reverse(); 
 
             for (let m of messaggi) {
-                if (!m.hasMedia) continue;
-                let tipo_file = m.type === "image" ? "foto" : m.type === "video" ? "video" : null;
-                if (!tipo_file) continue;
+                try {
+                    // 🛑 CONTROLLI DI SICUREZZA (Evita i messaggi fantasma)
+                    if (!m || !m.id || !m.id._serialized) continue; 
+                    if (!m.hasMedia) continue;
+                    
+                    let tipo_file = m.type === "image" ? "foto" : m.type === "video" ? "video" : null;
+                    if (!tipo_file) continue;
 
-                let nome_file = `WA_${m.timestamp}.${tipo_file === "foto" ? "jpg" : "mp4"}`;
-                
-                // Controllo se esiste già
-                const esiste = await db.get('SELECT 1 FROM log_birre WHERE nome_file = ?', [nome_file]);
-                if (esiste) continue;
+                    let nome_file = `WA_${m.timestamp}.${tipo_file === "foto" ? "jpg" : "mp4"}`;
+                    
+                    // Verifica se lo abbiamo già contato
+                    const esiste = await db.get('SELECT 1 FROM log_birre WHERE nome_file = ?', [nome_file]);
+                    if (esiste) continue;
 
-                const media = await m.downloadMedia();
-                if (!media) continue;
+                    // Prova a scaricare il media (qui spesso fallisce se il messaggio è vecchio)
+                    console.log(`📥 Tentativo download: ${nome_file}`);
+                    const media = await m.downloadMedia().catch(() => null);
+                    if (!media || !media.data) {
+                        console.log(`⏭️ Media non più disponibile sui server WA: ${nome_file}`);
+                        continue;
+                    }
 
-                let percorso = `${CARTELLA_MEDIA}/${nome_file}`;
-                fs.writeFileSync(percorso, media.data, 'base64');
+                    let percorso = `${CARTELLA_MEDIA}/${nome_file}`;
+                    fs.writeFileSync(percorso, media.data, 'base64');
 
-                // Dati del vecchio messaggio
-                let mContact = await m.getContact();
-                let mAutore = `+${mContact.number.substring(0, 2)} *** ${mContact.number.slice(-4)}`;
-                let mDataOra = new Date(m.timestamp * 1000).toLocaleString('it-IT');
+                    // Ottieni il contatto in sicurezza
+                    let mContact = await m.getContact().catch(() => ({ number: "0000000000", pushname: "Ignoto" }));
+                    let mAutore = `+${(mContact.number || "00").substring(0, 2)} *** ${(mContact.number || "0000").slice(-4)}`;
+                    let mDataOra = new Date(m.timestamp * 1000).toLocaleString('it-IT');
 
-                if (tipo_file === "foto") {
-                    await new Promise(resolve => {
-                        exec(`./env_birre/bin/python ai_judge.py "${percorso}"`, async (err, stdout) => {
-                            const match = stdout.match(/BEERS_FOUND:\s*(\d+)/);
-                            let birre = match ? parseInt(match[1]) : 0;
-                            if (birre > 0) {
-                                await inserisciNelDB(db, mDataOra, mAutore, nome_file, birre, "foto");
-                                recuperati++;
-                            }
-                            if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
-                            resolve();
+                    if (tipo_file === "foto") {
+                        await new Promise(resolve => {
+                            exec(`./env_birre/bin/python ai_judge.py "${percorso}"`, async (err, stdout) => {
+                                const match = stdout.match(/BEERS_FOUND:\s*(\d+)/);
+                                let birre = match ? parseInt(match[1]) : 0;
+                                if (birre > 0) {
+                                    await inserisciNelDB(db, mDataOra, mAutore, nome_file, birre, "foto");
+                                    recuperati++;
+                                }
+                                if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
+                                resolve();
+                            });
                         });
-                    });
-                } else if (tipo_file === "video" && m.body.match(regex_numeri_birra)) {
-                    await inserisciNelDB(db, mDataOra, mAutore, nome_file, 5, "video");
-                    if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
-                    recuperati++;
-                } else {
-                    if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
+                    } else if (tipo_file === "video" && m.body && m.body.match(regex_numeri_birra)) {
+                        await inserisciNelDB(db, mDataOra, mAutore, nome_file, 5, "video");
+                        if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
+                        recuperati++;
+                    } else {
+                        if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
+                    }
+                } catch (errLoop) {
+                    console.log(`⚠️ Salto un messaggio corrotto: ${errLoop.message}`);
+                    continue; // Non fermare tutto il recupero se un messaggio rompe!
                 }
             }
-            console.log(`🎉 Recupero finito: ${recuperati} birre aggiunte.`);
+            console.log(`🎉 FINE RECUPERO: ${recuperati} birre aggiunte.`);
             await db.close();
-            return; // STOP QUI
+            return;
         }
 
         // 🟡 GESTIONE MESSAGGI IN DIRETTA
