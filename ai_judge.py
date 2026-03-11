@@ -20,7 +20,7 @@ def analizza_singola_foto(percorso_foto):
         client = genai.Client(api_key=API_KEY)
         img = Image.open(percorso_foto).convert("RGB")
         
-            prompt = (
+        prompt = (
             "Sei un esperto sommelier e giudice di gara molto permissivo. Guarda attentamente questa immagine. "
             "Cerca tavoli, mani, e soprattutto contenitori (bicchieri, boccali, pinte, bottiglie, lattine o bicchieri di plastica). "
             "Sii di manica larga: conta come birra valida anche se il bicchiere è mezzo coperto, la foto è sfocata, "
