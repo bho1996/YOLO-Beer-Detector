@@ -8,7 +8,7 @@ const { exec } = require('child_process');
 // --- CONFIGURAZIONI ---
 const ID_GRUPPO = "120363420647117056@g.us";
 // 🚨 USA IL TUO ID ESATTO QUI, SENZA "+" E CON "@c.us" ALLA FINE
-const ID_PERSONALE = "393395292936@c.us"; 
+const ID_PERSONALE = "393395292936@c.us";
 const CARTELLA_MEDIA = "./photo_folder";
 const pythonPath = "./env_birre/bin/python";
 
@@ -82,14 +82,14 @@ client.on('message_create', async msg => {
     try {
         if (!msg || !msg.from) return;
         const chat = await msg.getChat().catch(() => null);
-        
+
         // 👇 AGGIUNGI QUESTE DUE RIGHE DI DEBUG 👇
         if (chat) {
             console.log(`[DEBUG] Messaggio in arrivo da chat: '${chat.name}' (ID: ${msg.from})`);
         }
 
         // FILTRO DI INGRESSO
-if (!chat || (msg.from !== ID_GRUPPO && msg.from !== ID_PERSONALE)) return;
+        if (!chat || (msg.from !== ID_GRUPPO && msg.from !== ID_PERSONALE)) return;
 
         let contact = await msg.getContact().catch(() => null);
         let autore = "Sconosciuto";
@@ -104,13 +104,13 @@ if (!chat || (msg.from !== ID_GRUPPO && msg.from !== ID_PERSONALE)) return;
         const numeriNelTesto = testo.match(/\d{4,6}/g);
         const numeroDichiarato = numeriNelTesto ? parseInt(numeriNelTesto[numeriNelTesto.length - 1]) : null;
 
-// 🟢 COMANDO RECUPERO STORICO
+        // 🟢 COMANDO RECUPERO STORICO
         if (testo.startsWith("!recupera_storico ")) {
             let limite = parseInt(testo.replace("!recupera_storico ", "").trim()) || 50;
             console.log(`\n⏳ [RECUPERO] Scansione ultimi ${limite} messaggi DEL GRUPPO...`);
-            
+
             const db = await open({ filename: './1m_beers.db', driver: sqlite3.Database });
-            
+
             // 🎯 IL TRUCCO: peschiamo la cronologia del gruppo, a prescindere da dove scrivi
             const chatGruppo = await client.getChatById(ID_GRUPPO).catch(() => null);
             if (!chatGruppo) {
@@ -120,13 +120,13 @@ if (!chat || (msg.from !== ID_GRUPPO && msg.from !== ID_PERSONALE)) return;
             }
 
             let messaggi = await chatGruppo.fetchMessages({ limit: limite }).catch(() => []);
-            
+
             messaggi.reverse();
             let recuperati = 0;
 
             for (let m of messaggi) {
                 if (!m || !m.hasMedia) continue;
-                
+
                 let tipo_file = m.type === "image" ? "foto" : m.type === "video" ? "video" : null;
                 if (!tipo_file) continue;
 
@@ -153,15 +153,15 @@ if (!chat || (msg.from !== ID_GRUPPO && msg.from !== ID_PERSONALE)) return;
                 }
 
                 if (tipo_file === "foto") {
-                    console.log(`🤖 Invio ${nome_file} all'AI... (Pausa 5s)`);
-                    await ritardo(5000);
-                    
+                    console.log(`🤖 Invio ${nome_file} all'AI... (Pausa 10s per evitare blocchi)`);
+                    await ritardo(10000);
+
                     await new Promise(resolve => {
                         exec(`${pythonPath} ai_judge.py "${percorso}"`, async (err, stdout) => {
                             const match = stdout.match(/BEERS_FOUND:\s*(\d+)/);
                             let birre = match ? parseInt(match[1]) : 0;
                             if (birre > 0) {
-await inserisciNelDB(db, mDataOra, mAutore, nome_file, birre, "foto", mNumeroDichiarato);
+                                await inserisciNelDB(db, mDataOra, mAutore, nome_file, birre, "foto", mNumeroDichiarato);
                                 recuperati++;
                             }
                             if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
@@ -169,7 +169,7 @@ await inserisciNelDB(db, mDataOra, mAutore, nome_file, birre, "foto", mNumeroDic
                         });
                     });
                 } else if (tipo_file === "video" && (m.body || "").match(regex_numeri_birra)) {
-await inserisciNelDB(db, mDataOra, mAutore, nome_file, 1, "video", mNumeroDichiarato);
+                    await inserisciNelDB(db, mDataOra, mAutore, nome_file, 1, "video", mNumeroDichiarato);
                     if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
                     recuperati++;
                 } else {
@@ -203,7 +203,7 @@ await inserisciNelDB(db, mDataOra, mAutore, nome_file, 1, "video", mNumeroDichia
                         if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
                         await db.close();
                     });
-                    return; 
+                    return;
                 } else if (tipo_file === "video" && testo.match(regex_numeri_birra)) {
                     await inserisciNelDB(db, data_ora, autore, nome_file, 1, "video", numeroDichiarato);
                     if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
