@@ -80,12 +80,17 @@ beers_per_day = 0
 beers_this_week = 0
 
 if not filtered_df.empty and filtered_df['data_ora_dt'].notna().any():
-    start_date = df['data_ora_dt'].min() 
-    last_date = filtered_df['data_ora_dt'].max() 
-    days_passed = (last_date - start_date).days
+    # 🌟 NOVITÀ: Usiamo la VERA data di inizio del gruppo
+    vero_inizio_gruppo = pd.to_datetime("2025-06-11")
+    last_date = filtered_df['data_ora_dt'].max()
     
-    if days_passed > 0 and db_counted_beers > 0:
-        beers_per_day = db_counted_beers / days_passed
+    # Calcoliamo quanti giorni sono passati dalla creazione a oggi
+    giorni_totali_veri = (last_date - vero_inizio_gruppo).days
+    
+    if giorni_totali_veri > 0 and historical_total > 0:
+        # Calcoliamo la VERA velocità media (usando tutte le birre, anche le ghost)
+        beers_per_day = historical_total / giorni_totali_veri
+        
         if beers_per_day > 0:
             remaining_beers = GOAL - historical_total
             remaining_days = remaining_beers / beers_per_day
