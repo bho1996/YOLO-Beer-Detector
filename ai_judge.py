@@ -110,6 +110,7 @@ def analizza_singola_foto(percorso_foto):
         if match:
             print(f"[GROQ] BEERS_FOUND: {match.group(1)}")
         else:
+            print(f"DIARIO SEGRETO DI GROQ: {testo}")
             print("BEERS_FOUND: 0")
 
     except Exception as e_groq:
