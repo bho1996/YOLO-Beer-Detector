@@ -20,7 +20,6 @@ def analizza_singola_foto(percorso_foto):
         client = genai.Client(api_key=API_KEY)
         img = Image.open(percorso_foto).convert("RGB")
         
-        prompt = (
             prompt = (
             "Sei un esperto sommelier e giudice di gara molto permissivo. Guarda attentamente questa immagine. "
             "Cerca tavoli, mani, e soprattutto contenitori (bicchieri, boccali, pinte, bottiglie, lattine o bicchieri di plastica). "
@@ -28,7 +27,6 @@ def analizza_singola_foto(percorso_foto):
             "o l'inquadratura taglia il boccale. Se c'è un drink, contalo. "
             "Nell'ultimissima riga della tua risposta scrivi ESATTAMENTE e SOLO: "
             "BEERS_FOUND: X (dove X è il numero totale intero di birre trovate, oppure 0)."
-        )
         )
         
         configurazione = types.GenerateContentConfig(
