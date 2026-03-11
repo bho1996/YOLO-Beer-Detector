@@ -143,6 +143,14 @@ if (!chat || (msg.from !== ID_GRUPPO && msg.from !== ID_PERSONALE)) return;
                 const mNumeri = (m.body || "").match(/\d{4,6}/g);
                 const mNumeroDichiarato = mNumeri ? parseInt(mNumeri[mNumeri.length - 1]) : null;
                 let mDataOra = new Date(m.timestamp * 1000).toLocaleString('it-IT');
+                let mContact = await m.getContact().catch(() => null);
+                let mAutore = "Storico"; // Fallback se non lo trova
+                if (mContact && mContact.number) {
+                    mAutore = `+${mContact.number.substring(0, 2)} *** ${mContact.number.slice(-4)}`;
+                } else if (m.author) {
+                    let rawNum = m.author.replace('@c.us', '');
+                    if (rawNum.length > 6) mAutore = `+${rawNum.substring(0, 2)} *** ${rawNum.slice(-4)}`;
+                }
 
                 if (tipo_file === "foto") {
                     console.log(`🤖 Invio ${nome_file} all'AI... (Pausa 5s)`);
@@ -153,7 +161,7 @@ if (!chat || (msg.from !== ID_GRUPPO && msg.from !== ID_PERSONALE)) return;
                             const match = stdout.match(/BEERS_FOUND:\s*(\d+)/);
                             let birre = match ? parseInt(match[1]) : 0;
                             if (birre > 0) {
-                                await inserisciNelDB(db, mDataOra, "Storico", nome_file, birre, "foto", mNumeroDichiarato);
+await inserisciNelDB(db, mDataOra, mAutore, nome_file, birre, "foto", mNumeroDichiarato);
                                 recuperati++;
                             }
                             if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
@@ -161,7 +169,7 @@ if (!chat || (msg.from !== ID_GRUPPO && msg.from !== ID_PERSONALE)) return;
                         });
                     });
                 } else if (tipo_file === "video" && (m.body || "").match(regex_numeri_birra)) {
-                    await inserisciNelDB(db, mDataOra, "Storico", nome_file, 1, "video", mNumeroDichiarato);
+await inserisciNelDB(db, mDataOra, mAutore, nome_file, 1, "video", mNumeroDichiarato);
                     if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
                     recuperati++;
                 } else {
