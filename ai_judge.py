@@ -46,7 +46,7 @@ def analizza_singola_foto(percorso_foto):
         )
         
         testo = response.text.strip()
-        match = re.search(r'RISULTATO_FINALE:\s*(\d+)', testo)
+        match = re.search(r'(?:BEERS_FOUND|RISULTATO_FINALE)[*:\s]*(\d+)', testo, re.IGNORECASE)
         
         if match:
             print(f"BEERS_FOUND: {match.group(1)}")
