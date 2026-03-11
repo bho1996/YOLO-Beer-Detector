@@ -39,14 +39,17 @@ def analizza_singola_foto(percorso_foto):
             ]
         )
 
+        # Usiamo il modello 8B per aggirare il blocco
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-1.5-flash-8b',
             contents=[img, prompt],
             config=configurazione
         )
         
         testo = response.text.strip()
-        match = re.search(r'RISULTATO_FINALE:\s*(\d+)', testo)
+        
+        # Ora cerchiamo la parola chiave corretta che abbiamo chiesto all'AI!
+        match = re.search(r'BEERS_FOUND:\s*(\d+)', testo)
         
         if match:
             print(f"BEERS_FOUND: {match.group(1)}")
