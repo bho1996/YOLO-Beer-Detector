@@ -41,7 +41,7 @@ def analizza_singola_foto(percorso_foto):
 
         # Usiamo il modello 8B per aggirare il blocco
         response = client.models.generate_content(
-            model='gemini-1.5-flash-8b',
+            model='gemini-1.5-flash',
             contents=[img, prompt],
             config=configurazione
         )
