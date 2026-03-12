@@ -4,7 +4,9 @@ import pandas as pd
 import datetime
 import math
 
-# --- CONFIGURATIONS ---
+# ==========================================
+# 1. CONFIGURATIONS & SETUP
+# ==========================================
 GOAL = 1000000
 WEEKLY_GOAL = 250 
 
@@ -12,10 +14,12 @@ st.set_page_config(
     page_title="Project 1M Beers",
     page_icon="🍻",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded" # Aperta di default per far vedere la Time Machine
 )
 
-# --- DATA LOADING ---
+# ==========================================
+# 2. HELPER FUNCTIONS
+# ==========================================
 @st.cache_data(ttl=60) 
 def load_data():
     try:
@@ -31,138 +35,6 @@ def load_data():
     except Exception as e:
         return pd.DataFrame(), 17500
 
-df, CURRENT_OFFICIAL_TOTAL = load_data()
-
-# --- HEADER & TITLE ---
-st.title("🍻 The 1 Million Beers Project")
-st.markdown("### *One million pints. One legendary group. Zero regrets!* 🚀")
-
-if df.empty:
-    st.error("No data found! Looks like the keg is empty. Run `build_db.py` first.")
-    st.stop()
-
-# Date cleaning
-df['data_ora_dt'] = pd.to_datetime(df['data_ora'], format='mixed', dayfirst=True, errors='coerce')
-
-# --- DEFINITION OF GHOST BEERS ---
-totale_foto_db = df[df['tipo_file'] == 'foto']['punti'].sum()
-totale_video_db = len(df[df['tipo_file'] == 'video'])
-
-current_db_total = totale_foto_db + totale_video_db
-ghost_beers = CURRENT_OFFICIAL_TOTAL - current_db_total
-
-# ==========================================
-# MATH & STATS
-# ==========================================
-punti_foto = df[df['tipo_file'] == 'foto']['punti'].sum()
-punti_video = len(df[df['tipo_file'] == 'video'])
-
-db_counted_beers = punti_foto + punti_video
-historical_total = db_counted_beers + ghost_beers 
-
-total_videos = len(df[df['tipo_file'] == 'video'])
-record_upload = df['punti'].max() if not df.empty else 0
-
-eta_text = "ETA: Keep drinking to calculate..."
-beers_per_day = 0
-beers_this_week = 0
-
-if not df.empty and df['data_ora_dt'].notna().any():
-    vero_inizio_gruppo = pd.to_datetime("2025-06-11")
-    last_date = df['data_ora_dt'].max()
-    
-    giorni_totali_veri = (last_date - vero_inizio_gruppo).days
-    
-    if giorni_totali_veri > 0 and historical_total > 0:
-        beers_per_day = historical_total / giorni_totali_veri
-        
-        if beers_per_day > 0:
-            remaining_beers = GOAL - historical_total
-            remaining_days = remaining_beers / beers_per_day
-            eta_date = last_date + pd.Timedelta(days=remaining_days)
-            eta_text = f"🎯 **Milestone ETA:** {eta_date.strftime('%B %Y')}"
-            
-    seven_days_ago = last_date - pd.Timedelta(days=7)
-    weekly_df = df[df['data_ora_dt'] >= seven_days_ago]
-    beers_this_week = weekly_df['punti'].sum()
-
-# --- TOP METRICS ---
-col1, col2, col3, col4 = st.columns(4)
-col1.metric(label="🏆 Estimated Global Count", value=f"{int(historical_total):,}")
-col2.metric(label="🔥 Group Pace (Beers/Day)", value=f"{beers_per_day:.1f}")
-col3.metric(label="🎬 Downs (Videos)", value=total_videos)
-col4.metric(label="👑 Biggest Single Upload", value=int(record_upload) if pd.notna(record_upload) else 0)
-
-st.write("") 
-
-# --- PROGRESS BARS ---
-prog_col1, prog_col2 = st.columns(2)
-
-with prog_col1:
-    progress_global = min(historical_total / GOAL, 1.0) 
-    st.markdown(f"#### 🚀 The Journey: **{int(historical_total):,}** / {GOAL:,} ({progress_global * 100:.3f}%)")
-    st.progress(progress_global)
-    st.caption(eta_text)
-
-with prog_col2:
-    progress_weekly = min(beers_this_week / WEEKLY_GOAL, 1.0)
-    st.markdown(f"#### 🗓️ Weekly Mission: **{int(beers_this_week)}** / {WEEKLY_GOAL}")
-    st.progress(progress_weekly)
-    if beers_this_week >= WEEKLY_GOAL:
-        st.caption("✅ **Weekly target smashed!** Awesome job team.")
-    else:
-        st.caption(f"Need **{int(WEEKLY_GOAL - beers_this_week)}** more pints to hit the target!")
-
-st.write("")
-
-# --- DAILY MVP (Top 3 of the Day) ---
-oggi = pd.Timestamp.now().date()
-df_oggi = df[df['data_ora_dt'].dt.date == oggi]
-
-if not df_oggi.empty:
-    # Count uploads (cheers) per user and get the top 3
-    daily_counts = df_oggi.groupby('utente').size().reset_index(name='Uploads')
-    daily_counts = daily_counts.sort_values(by='Uploads', ascending=False).head(3).reset_index(drop=True)
-    
-    st.markdown("#### 🏆 Today's Top Drinkers")
-    
-    cols = st.columns(len(daily_counts))
-    medals = ["🥇 1st", "🥈 2nd", "🥉 3rd"]
-    
-    for i, row in daily_counts.iterrows():
-        with cols[i]:
-            st.metric(
-                label=medals[i], 
-                value=str(row['utente']), 
-                delta=f"{row['Uploads']} cheers",
-                delta_color="off"
-            )
-else:
-    st.info("😴 Nobody has had a drink yet today. Who will be the first to break the ice?")
-
-# ==========================================
-# ⏳ TIME MACHINE
-# ==========================================
-st.divider()
-st.subheader("🕰️ The Time Machine")
-
-min_date = df['data_ora_dt'].min().date() if not df['data_ora_dt'].isna().all() else datetime.date.today()
-max_date = df['data_ora_dt'].max().date() if not df['data_ora_dt'].isna().all() else datetime.date.today()
-
-selected_date = st.slider(
-    "Drag the slider back in time to see the stats exactly as they were on that day:",
-    min_value=min_date,
-    max_value=max_date,
-    value=max_date,
-    format="DD/MM/YYYY"
-)
-
-selected_datetime = pd.to_datetime(selected_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-filtered_df = df[df['data_ora_dt'] <= selected_datetime].copy()
-
-# ==========================================
-# LEADERBOARD FUNCTION
-# ==========================================
 def build_leaderboard(df_to_use, top_n=15):
     if df_to_use.empty:
         return pd.DataFrame()
@@ -186,7 +58,134 @@ def build_leaderboard(df_to_use, top_n=15):
     if len(lb) > 2: lb.loc[3, 'Drinker'] = "🥉 " + str(lb.loc[3, 'Drinker'])
     return lb[['Drinker', 'Total Score', 'Regular Pints', 'Downs']]
 
-# --- MAIN DASHBOARD (LEADERBOARDS & CHARTS) ---
+# ==========================================
+# 3. DATA LOADING & BASE PROCESSING
+# ==========================================
+df, CURRENT_OFFICIAL_TOTAL = load_data()
+
+if df.empty:
+    st.error("No data found! Looks like the keg is empty. Run `build_db.py` first.")
+    st.stop()
+
+# Date cleaning
+df['data_ora_dt'] = pd.to_datetime(df['data_ora'], format='mixed', dayfirst=True, errors='coerce')
+
+# Global logic (Ghost Beers)
+totale_foto_db = df[df['tipo_file'] == 'foto']['punti'].sum()
+totale_video_db = len(df[df['tipo_file'] == 'video'])
+current_db_total = totale_foto_db + totale_video_db
+ghost_beers = CURRENT_OFFICIAL_TOTAL - current_db_total
+
+# ==========================================
+# 4. SIDEBAR (TIME MACHINE & FILTERS)
+# ==========================================
+with st.sidebar:
+    st.subheader("🕰️ The Time Machine")
+    min_date = df['data_ora_dt'].min().date() if not df['data_ora_dt'].isna().all() else datetime.date.today()
+    max_date = df['data_ora_dt'].max().date() if not df['data_ora_dt'].isna().all() else datetime.date.today()
+
+    selected_date = st.slider(
+        "Drag back in time to see past stats:",
+        min_value=min_date,
+        max_value=max_date,
+        value=max_date,
+        format="DD/MM/YYYY"
+    )
+
+selected_datetime = pd.to_datetime(selected_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+filtered_df = df[df['data_ora_dt'] <= selected_datetime].copy()
+
+# ==========================================
+# 5. CORE MATH & STATS (Based on filtered_df)
+# ==========================================
+punti_foto = filtered_df[filtered_df['tipo_file'] == 'foto']['punti'].sum()
+punti_video = len(filtered_df[filtered_df['tipo_file'] == 'video'])
+
+db_counted_beers = punti_foto + punti_video
+historical_total = db_counted_beers + ghost_beers 
+
+total_videos = len(filtered_df[filtered_df['tipo_file'] == 'video'])
+record_upload = filtered_df['punti'].max() if not filtered_df.empty else 0
+
+eta_text = "ETA: Keep drinking to calculate..."
+beers_per_day = 0
+beers_this_week = 0
+
+if not filtered_df.empty and filtered_df['data_ora_dt'].notna().any():
+    vero_inizio_gruppo = pd.to_datetime("2025-06-11")
+    last_date = filtered_df['data_ora_dt'].max()
+    giorni_totali_veri = (last_date - vero_inizio_gruppo).days
+    
+    if giorni_totali_veri > 0 and historical_total > 0:
+        beers_per_day = historical_total / giorni_totali_veri
+        if beers_per_day > 0:
+            remaining_beers = GOAL - historical_total
+            remaining_days = remaining_beers / beers_per_day
+            eta_date = last_date + pd.Timedelta(days=remaining_days)
+            eta_text = f"🎯 **Milestone ETA:** {eta_date.strftime('%B %Y')}"
+            
+    seven_days_ago = last_date - pd.Timedelta(days=7)
+    weekly_df = filtered_df[filtered_df['data_ora_dt'] >= seven_days_ago]
+    beers_this_week = weekly_df['punti'].sum()
+
+# ==========================================
+# 6. UI: HEADER & DAILY MVP
+# ==========================================
+st.title("🍻 The 1 Million Beers Project")
+st.markdown("### *One million pints. One legendary group. Zero regrets!* 🚀")
+
+# Daily MVP (Always uses today's un-filtered data)
+oggi = pd.Timestamp.now().date()
+df_oggi = df[df['data_ora_dt'].dt.date == oggi]
+
+if not df_oggi.empty:
+    daily_counts = df_oggi.groupby('utente').size().reset_index(name='Uploads')
+    daily_counts = daily_counts.sort_values(by='Uploads', ascending=False).head(3).reset_index(drop=True)
+    
+    st.markdown("#### 🏆 Today's Top Drinkers")
+    cols = st.columns(len(daily_counts))
+    medals = ["🥇 1st", "🥈 2nd", "🥉 3rd"]
+    
+    for i, row in daily_counts.iterrows():
+        with cols[i]:
+            st.metric(label=medals[i], value=str(row['utente']), delta=f"{row['Uploads']} cheers", delta_color="off")
+else:
+    st.info("😴 Nobody has had a drink yet today. Who will be the first to break the ice?")
+
+st.write("") 
+
+# ==========================================
+# 7. UI: TOP METRICS & PROGRESS BARS
+# ==========================================
+col1, col2, col3, col4 = st.columns(4)
+col1.metric(label="🏆 Estimated Global Count", value=f"{int(historical_total):,}")
+col2.metric(label="🔥 Group Pace (Beers/Day)", value=f"{beers_per_day:.1f}")
+col3.metric(label="🎬 Downs (Videos)", value=total_videos)
+col4.metric(label="👑 Biggest Single Upload", value=int(record_upload) if pd.notna(record_upload) else 0)
+
+st.write("") 
+
+prog_col1, prog_col2 = st.columns(2)
+with prog_col1:
+    progress_global = min(historical_total / GOAL, 1.0) 
+    st.markdown(f"#### 🚀 The Journey: **{int(historical_total):,}** / {GOAL:,} ({progress_global * 100:.3f}%)")
+    st.progress(progress_global)
+    st.caption(eta_text)
+
+with prog_col2:
+    progress_weekly = min(beers_this_week / WEEKLY_GOAL, 1.0)
+    st.markdown(f"#### 🗓️ Weekly Mission: **{int(beers_this_week)}** / {WEEKLY_GOAL}")
+    st.progress(progress_weekly)
+    if beers_this_week >= WEEKLY_GOAL:
+        st.caption("✅ **Weekly target smashed!** Awesome job team.")
+    else:
+        st.caption(f"Need **{int(WEEKLY_GOAL - beers_this_week)}** more pints to hit the target!")
+
+st.divider()
+
+# ==========================================
+# 8. UI: MAIN DASHBOARD TABS
+# ==========================================
 col_left, col_right = st.columns([1, 1.5])
 
 with col_left:
@@ -249,7 +248,7 @@ with col_right:
             st.write("Not enough timeline data to show the chart.")
 
 # ==========================================
-# 📊 ADVANCED ANALYTICS & MILESTONES
+# 9. UI: ADVANCED ANALYTICS
 # ==========================================
 st.divider()
 st.subheader("📊 Advanced Analytics & Milestones")
@@ -330,7 +329,7 @@ with tab_milestones:
             st.info("No new 500-beer milestones hit in the recorded history yet!")
 
 # ==========================================
-# 🕵️ PLAYER SPOTLIGHT & DEBUGGER
+# 10. UI: PLAYER SPOTLIGHT & RIVALRY
 # ==========================================
 st.divider()
 st.subheader("🕵️ Player Spotlight & Rivalry")
@@ -347,10 +346,7 @@ if selected_user:
         user_videos = len(user_df[user_df['tipo_file'] == 'video'])
         avg_beers = user_total / user_uploads if user_uploads > 0 else 0
         
-        # --- RIVALRY CALCULATION (Hunter and Prey) ---
         lb_completa = build_leaderboard(filtered_df, top_n=1000)
-        
-        # Clean medals from the name for comparison
         lb_completa['Drinker_Clean'] = lb_completa['Drinker'].astype(str).str.replace(r'[🥇🥈🥉]\s', '', regex=True)
         
         try:
@@ -368,7 +364,6 @@ if selected_user:
             rivalry_text = "📊 Drink more to get on the leaderboard radar!"
 
         st.info(rivalry_text)
-        # ----------------------------------------------
         
         ucol1, ucol2, ucol3, ucol4 = st.columns(4)
         ucol1.metric("🍻 Logged Beers", int(user_total))
