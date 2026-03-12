@@ -161,7 +161,6 @@ if not filtered_df.empty and filtered_df['data_ora_dt'].notna().any():
 # 7. RIEMPIMENTO DEI CONTENITORI (Top UI)
 # ==========================================
 
-# 7A. Riempiamo le Top Metrics
 with top_metrics_container:
     col1, col2, col3, col4 = st.columns(4)
     col1.metric(label="🏆 Estimated Global Count", value=f"{int(historical_total):,}", help="Includes ghost beers from WhatsApp history.")
@@ -169,7 +168,6 @@ with top_metrics_container:
     col3.metric(label="🎬 Downs (Videos)", value=total_videos, help="A video is worth 5 points in the leaderboard!")
     col4.metric(label="👑 Biggest Single Upload", value=int(record_upload) if pd.notna(record_upload) else 0, help="The largest amount of beers recognized in a single photo.")
 
-# 7B. Riempiamo le Progress Bars
 with progress_container:
     prog_col1, prog_col2 = st.columns(2)
     with prog_col1:
@@ -187,7 +185,6 @@ with progress_container:
         else:
             st.caption(f"Need **{int(WEEKLY_GOAL - beers_this_week)}** more pints to hit the target!")
 
-# 7C. Riempiamo il Daily MVP
 with mvp_container:
     oggi = pd.Timestamp.now().date()
     df_oggi = df[df['data_ora_dt'].dt.date == oggi]
@@ -196,7 +193,8 @@ with mvp_container:
         daily_counts = df_oggi.groupby('utente').size().reset_index(name='Uploads')
         daily_counts = daily_counts.sort_values(by='Uploads', ascending=False).head(3).reset_index(drop=True)
         
-        st.markdown("#### 🏆 Today's Top Drinkers")
+        # 🛠️ AGGIUNTA SPIEGAZIONE DEL CHEER
+        st.markdown("#### 🏆 Today's Top Drinkers", help="A 'cheer' is an upload event (a photo or a video). 1 upload = 1 cheer, regardless of how many beers were in the picture!")
         cols = st.columns(len(daily_counts))
         medals = ["🥇 1st", "🥈 2nd", "🥉 3rd"]
         
@@ -284,7 +282,8 @@ with tab_time:
         with c1:
             st.markdown("**When do we drink? (Hour of the Day)**")
             filtered_df['Hour'] = filtered_df['data_ora_dt'].dt.hour
-            hourly_stats = filtered_df.groupby('Hour')['punti'].sum()
+            # 🛠️ AGGIUNTA RINOMINAZIONE IN "Points"
+            hourly_stats = filtered_df.groupby('Hour')['punti'].sum().rename("Points")
             hourly_stats = hourly_stats.reindex(range(24), fill_value=0)
             st.bar_chart(hourly_stats, color="#FFD700")
             
@@ -295,8 +294,10 @@ with tab_time:
             nomi_giorni = filtered_df['data_ora_dt'].dt.day_name()
             filtered_df['DayOfWeek'] = pd.Categorical(nomi_giorni, categories=days_order, ordered=True)
             
+            # 🛠️ AGGIUNTA RINOMINAZIONE IN "Points"
             day_stats = filtered_df.groupby('DayOfWeek', observed=False)['punti'].sum().reset_index()
-            st.bar_chart(day_stats, x='DayOfWeek', y='punti', color="#FF8C00")
+            day_stats = day_stats.rename(columns={'punti': 'Points'})
+            st.bar_chart(day_stats, x='DayOfWeek', y='Points', color="#FF8C00")
 
 with tab_streaks:
     st.write("Consecutive days logging at least one beer. Who has the most resilient liver?")
@@ -394,7 +395,10 @@ if selected_user:
         ucol3.metric("🍺 Avg per Upload", f"{avg_beers:.1f}")
         ucol4.metric("🎬 Downs", user_videos)
         
+        # 🛠️ RIPRISTINATO IL DEBUGGER PER I VIDEO
         with st.expander("🔎 View detailed log (Debugger)"):
-            debug_table = user_df.sort_values(by='data_ora_dt', ascending=False)[['data_ora', 'punti', 'tipo_file', 'nome_file']]
-            debug_table.columns = ['Date & Time', 'Points Awarded', 'File Type', 'File Name']
+            debug_table = user_df.sort_values(by='data_ora_dt', ascending=False)[['data_ora', 'punti', 'tipo_file', 'nome_file']].copy()
+            debug_table['punti_mostrati'] = debug_table.apply(lambda row: 5 if row['tipo_file'] == 'video' else row['punti'], axis=1)
+            debug_table = debug_table[['data_ora', 'punti_mostrati', 'tipo_file', 'nome_file']]
+            debug_table.columns = ['Date & Time', 'Personal Points', 'File Type', 'File Name']
             st.dataframe(debug_table, use_container_width=True, hide_index=True)
