@@ -45,7 +45,10 @@ if df.empty:
 df['data_ora_dt'] = pd.to_datetime(df['data_ora'], format='mixed', dayfirst=True, errors='coerce')
 
 # --- DEFINIZIONE GHOST BEERS (Necessaria per i calcoli successivi) ---
-current_db_total = df['punti'].sum()
+totale_foto_db = df[df['tipo_file'] == 'foto']['punti'].sum()
+totale_video_db = len(df[df['tipo_file'] == 'video'])
+
+current_db_total = totale_foto_db + totale_video_db
 ghost_beers = CURRENT_OFFICIAL_TOTAL - current_db_total
 
 # ==========================================
