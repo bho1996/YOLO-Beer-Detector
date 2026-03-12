@@ -17,13 +17,12 @@ const regex_numeri_birra = /\b[1-9]\d{4,5}\b/g;
 let isSyncing = false;
 const ritardo = ms => new Promise(res => setTimeout(res, ms));
 
-// --- FUNZIONE DB (Pulita, senza il vecchio Notaio) ---
+// --- FUNZIONE DB ---
 async function inserisciNelDB(dbConnection, d_ora, utente, file, punti, tipo) {
     try {
         const row = await dbConnection.get("SELECT valore FROM config WHERE chiave = 'OFFICIAL_TOTAL'");
         const totalePrecedente = parseInt(row.valore || 0);
         
-        // I punti che arrivano qui sono già quelli definitivi decisi dal Python!
         let incrementoReale = (tipo === "video") ? 1 : punti;
         const nuovoTotale = totalePrecedente + incrementoReale;
 
@@ -35,7 +34,6 @@ async function inserisciNelDB(dbConnection, d_ora, utente, file, punti, tipo) {
         await dbConnection.run(`UPDATE config SET valore = ? WHERE chiave = 'OFFICIAL_TOTAL'`, [nuovoTotale]);
         console.log(`🏅 ASSEGNATI: ${incrementoReale} punti a ${utente}! (Nuovo Totale: ${nuovoTotale})`);
 
-        // 🎥 ALLERTA VIDEO OGNI 100
         if (Math.floor(nuovoTotale / 100) > Math.floor(totalePrecedente / 100)) {
             const centinaio = Math.floor(nuovoTotale / 100) * 100;
             console.log(`🚨 TRAGUARDO 100 RAGGIUNTO: ${centinaio}!`);
@@ -76,7 +74,6 @@ client.on('message_create', async msg => {
             console.log(`[DEBUG] Messaggio in arrivo da chat: '${chat.name}' (ID: ${msg.from})`);
         }
 
-        // FILTRO DI INGRESSO
         if (!chat || (msg.from !== ID_GRUPPO && msg.from !== ID_PERSONALE)) return;
 
         let contact = await msg.getContact().catch(() => null);
@@ -132,17 +129,16 @@ client.on('message_create', async msg => {
                 }
 
                 if (tipo_file === "foto") {
-                    console.log(`🤖 Invio ${nome_file} all'AI... (Pausa 10s per evitare blocchi)`);
+                    console.log(`🤖 Invio ${nome_file} all'AI...`);
                     await ritardo(10000);
                     
-                    // PREPARAZIONE DATI PER PYTHON (Storico)
                     const row = await db.get("SELECT valore FROM config WHERE chiave = 'OFFICIAL_TOTAL'");
                     const totaleAttuale = parseInt(row.valore || 0);
                     const mTestoPulito = (m.body || "").replace(/"/g, '\\"').replace(/\n/g, ' ');
 
                     await new Promise(resolve => {
-                        // CHIAMATA A PYTHON CON I NUOVI ARGOMENTI
                         exec(`${pythonPath} ai_judge.py "${percorso}" ${totaleAttuale} "${mTestoPulito}"`, async (err, stdout) => {
+                            if (stdout) console.log(`\n--- CERVELLO PYTHON ---\n${stdout.trim()}\n-----------------------`);
                             const match = stdout.match(/BEERS_FOUND:\s*(\d+)/);
                             let birre = match ? parseInt(match[1]) : 0;
                             if (birre > 0) {
@@ -153,7 +149,9 @@ client.on('message_create', async msg => {
                             resolve();
                         });
                     });
-                } else if (tipo_file === "video" && (m.body || "").match(regex_numeri_birra)) {
+                // 👇 FIXED VIDEO LOGIC FOR HISTORICAL RECOVERY 👇
+                } else if (tipo_file === "video") {
+                    console.log(`🎬 [VIDEO RICEVUTO] Recuperato sgolata dallo storico.`);
                     await inserisciNelDB(db, mDataOra, mAutore, nome_file, 1, "video");
                     if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
                     recuperati++;
@@ -180,13 +178,12 @@ client.on('message_create', async msg => {
 
                 if (tipo_file === "foto") {
                     
-                    // PREPARAZIONE DATI PER PYTHON (Diretta)
                     const row = await db.get("SELECT valore FROM config WHERE chiave = 'OFFICIAL_TOTAL'");
                     const totaleAttuale = parseInt(row.valore || 0);
                     const testoPulito = testo.replace(/"/g, '\\"').replace(/\n/g, ' ');
 
-                    // CHIAMATA A PYTHON CON I NUOVI ARGOMENTI
                     exec(`${pythonPath} ai_judge.py "${percorso}" ${totaleAttuale} "${testoPulito}"`, async (err, stdout) => {
+                        if (stdout) console.log(`\n--- CERVELLO PYTHON ---\n${stdout.trim()}\n-----------------------`);
                         const match = stdout.match(/BEERS_FOUND:\s*(\d+)/);
                         let birre = match ? parseInt(match[1]) : 0;
                         if (birre > 0) {
@@ -196,7 +193,9 @@ client.on('message_create', async msg => {
                         await db.close();
                     });
                     return; 
-                } else if (tipo_file === "video" && testo.match(regex_numeri_birra)) {
+                // 👇 FIXED VIDEO LOGIC FOR LIVE MESSAGES 👇
+                } else if (tipo_file === "video") {
+                    console.log(`\n🎬 [VIDEO RICEVUTO] L'utente ${autore} ha mandato una sgolata!`);
                     await inserisciNelDB(db, data_ora, autore, nome_file, 1, "video");
                     if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
                 } else {

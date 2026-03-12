@@ -93,27 +93,26 @@ def analizza_singola_foto(percorso_foto):
 def analizza_intenzione_utente(testo_utente, conteggio_ai, totale_attuale):
     testo = str(testo_utente).lower()
     
-    # Trova TUTTI i numeri nel messaggio (es: "19487, 88" -> ['19487', '88'])
     numeri_trovati = re.findall(r'\d+', testo)
     numeri_validi = []
     
     for num_str in numeri_trovati:
         num = int(num_str)
         
-        # CASO A: Il numero è scritto per intero (es. 19487)
-        if totale_attuale < num <= totale_attuale + 15:
+        # CASO A: Il numero è scritto per intero
+        # PERDONO: Accettiamo numeri fino a 5 posizioni indietro
+        if totale_attuale - 5 <= num <= totale_attuale + 15:
             numeri_validi.append(num)
             
-        # CASO B: Il numero è abbreviato (es. scrive "88" per intendere 19488)
+        # CASO B: Il numero è abbreviato
         elif 0 < num < 100:
             base_centinaia = (totale_attuale // 100) * 100
             num_ricostruito = base_centinaia + num
             
-            # Caso limite: passaggio di centinaia (es. da 19499 a 19501 scrivendo "01")
-            if num_ricostruito <= totale_attuale:
+            if num_ricostruito <= totale_attuale - 50:
                 num_ricostruito += 100
                 
-            if totale_attuale < num_ricostruito <= totale_attuale + 15:
+            if totale_attuale - 5 <= num_ricostruito <= totale_attuale + 15:
                 numeri_validi.append(num_ricostruito)
 
     # CALCOLO DELL'INTENZIONE
@@ -121,14 +120,27 @@ def analizza_intenzione_utente(testo_utente, conteggio_ai, totale_attuale):
         massimo_dichiarato = max(numeri_validi)
         salto_umano = massimo_dichiarato - totale_attuale
         
-        # Se l'AI vede almeno 1 birra, vince la matematica umana
+        # L'utente ha scritto un numero valido, ma è indietro o uguale al DB
+        if salto_umano <= 0:
+            print(f"⚖️ [NOTAIO] Utente disallineato ({massimo_dichiarato} vs DB {totale_attuale}). Lo perdono: forzo +1.")
+            return 1
+            
+        # L'utente fa un salto valido e l'AI vede birre
         if conteggio_ai >= 1:
             print(f"⚖️ [NOTAIO] Trovato max: {massimo_dichiarato}. Salto: +{salto_umano} (Ignoro i {conteggio_ai} dell'AI)")
             return salto_umano
 
-    # FALLBACK: Se non ci sono numeri o l'AI vede 0
-    print(f"⚖️ [NOTAIO] Nessun numero valido nel testo o foto senza birre. Mi fido dell'AI: +{conteggio_ai}")
-    return conteggio_ai if conteggio_ai > 0 else 1
+    # ==========================================
+    # FALLBACK: NESSUN NUMERO O NUMERO NON VALIDO
+    # ==========================================
+    if conteggio_ai > 0:
+        # L'AI vede qualcosa, ma l'umano non ha scritto numeri utili.
+        # Per sicurezza, diamo SEMPRE e SOLO 1 punto.
+        print(f"⚖️ [NOTAIO] Nessun numero utile. L'AI vede {conteggio_ai} birre, ma io FORZO +1 per sicurezza.")
+        return 1
+    else:
+        print("⚖️ [NOTAIO] L'AI non vede nulla e l'utente non ha scritto nulla. Scarto.")
+        return 0
 
 # ==========================================
 # 3. MOTORE PRINCIPALE (Ingresso dati)
@@ -141,20 +153,15 @@ if __name__ == "__main__":
 
     percorso_foto = sys.argv[1]
     
-    # Se il bot NodeJS passa anche il totale e il testo, li raccogliamo.
-    # Altrimenti mettiamo valori di default per far funzionare lo script anche da solo.
     totale_attuale = int(sys.argv[2]) if len(sys.argv) > 2 else 0
     testo_utente = sys.argv[3] if len(sys.argv) > 3 else ""
 
-    # 1. Chiediamo all'AI di guardare la foto
     conteggio_ai = analizza_singola_foto(percorso_foto)
 
-    # 2. Passiamo la palla al Notaio
     if totale_attuale > 0 or testo_utente:
         risultato_finale = analizza_intenzione_utente(testo_utente, conteggio_ai, totale_attuale)
     else:
         print("⚖️ [NOTAIO] Testo o totale mancanti dal comando terminale. Uso solo l'AI.")
         risultato_finale = conteggio_ai if conteggio_ai > 0 else 1
 
-    # 3. L'unica stringa che il bot NodeJS deve leggere per assegnare i punti
     print(f"BEERS_FOUND: {risultato_finale}")
