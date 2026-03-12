@@ -120,9 +120,11 @@ oggi = pd.Timestamp.now().date()
 df_oggi = df[df['data_ora_dt'].dt.date == oggi]
 
 if not df_oggi.empty:
-    mvp_oggi = df_oggi.groupby('utente')['punti'].sum().idxmax()
-    birre_mvp = df_oggi.groupby('utente')['punti'].sum().max()
-    st.success(f"👑 **DAILY MVP:** {mvp_oggi} is dominating today with {int(birre_mvp)} beers! Anyone want to challenge them?")
+    # INVECE di sommare i punti, contiamo il NUMERO di upload (righe nel DB)
+    mvp_oggi = df_oggi.groupby('utente').size().idxmax()
+    uploads_mvp = df_oggi.groupby('utente').size().max()
+    
+    st.success(f"👑 **DAILY MVP:** {mvp_oggi} is the most active today with {int(uploads_mvp)} cheers (uploads)! Anyone want to challenge them?")
 else:
     st.info("😴 Nobody has had a drink yet today. Who will be the first to break the ice?")
 
