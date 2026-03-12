@@ -7,7 +7,7 @@ const { exec } = require('child_process');
 
 // --- CONFIGURAZIONI ---
 const ID_GRUPPO = "120363420647117056@g.us";
-const ID_PERSONALE = "393395292936@c.us"; 
+const ID_PERSONALE = "393395292936@c.us";
 const CARTELLA_MEDIA = "./photo_folder";
 const pythonPath = "./env_birre/bin/python";
 
@@ -22,7 +22,7 @@ async function inserisciNelDB(dbConnection, d_ora, utente, file, punti, tipo) {
     try {
         const row = await dbConnection.get("SELECT valore FROM config WHERE chiave = 'OFFICIAL_TOTAL'");
         const totalePrecedente = parseInt(row.valore || 0);
-        
+
         let incrementoReale = (tipo === "video") ? 1 : punti;
         const nuovoTotale = totalePrecedente + incrementoReale;
 
@@ -69,7 +69,7 @@ client.on('message_create', async msg => {
     try {
         if (!msg || !msg.from) return;
         const chat = await msg.getChat().catch(() => null);
-        
+
         if (chat) {
             console.log(`[DEBUG] Messaggio in arrivo da chat: '${chat.name}' (ID: ${msg.from})`);
         }
@@ -89,7 +89,7 @@ client.on('message_create', async msg => {
         if (testo.startsWith("!recupera_storico ")) {
             let limite = parseInt(testo.replace("!recupera_storico ", "").trim()) || 50;
             console.log(`\n⏳ [RECUPERO] Scansione ultimi ${limite} messaggi DEL GRUPPO...`);
-            
+
             const db = await open({ filename: './1m_beers.db', driver: sqlite3.Database });
             const chatGruppo = await client.getChatById(ID_GRUPPO).catch(() => null);
             if (!chatGruppo) {
@@ -104,7 +104,7 @@ client.on('message_create', async msg => {
 
             for (let m of messaggi) {
                 if (!m || !m.hasMedia) continue;
-                
+
                 let tipo_file = m.type === "image" ? "foto" : m.type === "video" ? "video" : null;
                 if (!tipo_file) continue;
 
@@ -131,7 +131,7 @@ client.on('message_create', async msg => {
                 if (tipo_file === "foto") {
                     console.log(`🤖 Invio ${nome_file} all'AI...`);
                     await ritardo(10000);
-                    
+
                     const row = await db.get("SELECT valore FROM config WHERE chiave = 'OFFICIAL_TOTAL'");
                     const totaleAttuale = parseInt(row.valore || 0);
                     const mTestoPulito = (m.body || "").replace(/"/g, '\\"').replace(/\n/g, ' ');
@@ -139,8 +139,9 @@ client.on('message_create', async msg => {
                     await new Promise(resolve => {
                         exec(`${pythonPath} ai_judge.py "${percorso}" ${totaleAttuale} "${mTestoPulito}"`, async (err, stdout) => {
                             if (stdout) console.log(`\n--- CERVELLO PYTHON ---\n${stdout.trim()}\n-----------------------`);
-                            const match = stdout.match(/BEERS_FOUND:\s*(\d+)/);
-                            let birre = match ? parseInt(match[1]) : 0;
+                            // Cerca tutte le occorrenze e prende solo l'ultima (quella definitiva del Notaio)
+                            const matches = [...stdout.matchAll(/BEERS_FOUND:\s*(\d+)/g)];
+                            let birre = matches.length > 0 ? parseInt(matches[matches.length - 1][1]) : 0;
                             if (birre > 0) {
                                 await inserisciNelDB(db, mDataOra, mAutore, nome_file, birre, "foto");
                                 recuperati++;
@@ -149,7 +150,7 @@ client.on('message_create', async msg => {
                             resolve();
                         });
                     });
-                // 👇 FIXED VIDEO LOGIC FOR HISTORICAL RECOVERY 👇
+                    // 👇 FIXED VIDEO LOGIC FOR HISTORICAL RECOVERY 👇
                 } else if (tipo_file === "video") {
                     console.log(`🎬 [VIDEO RICEVUTO] Recuperato sgolata dallo storico.`);
                     await inserisciNelDB(db, mDataOra, mAutore, nome_file, 1, "video");
@@ -177,23 +178,24 @@ client.on('message_create', async msg => {
                 fs.writeFileSync(percorso, media.data, 'base64');
 
                 if (tipo_file === "foto") {
-                    
+
                     const row = await db.get("SELECT valore FROM config WHERE chiave = 'OFFICIAL_TOTAL'");
                     const totaleAttuale = parseInt(row.valore || 0);
                     const testoPulito = testo.replace(/"/g, '\\"').replace(/\n/g, ' ');
 
                     exec(`${pythonPath} ai_judge.py "${percorso}" ${totaleAttuale} "${testoPulito}"`, async (err, stdout) => {
                         if (stdout) console.log(`\n--- CERVELLO PYTHON ---\n${stdout.trim()}\n-----------------------`);
-                        const match = stdout.match(/BEERS_FOUND:\s*(\d+)/);
-                        let birre = match ? parseInt(match[1]) : 0;
+                        // ✅ NUOVO CODICE: Prende solo l'ultima parola del Notaio
+                        const matches = [...stdout.matchAll(/BEERS_FOUND:\s*(\d+)/g)];
+                        let birre = matches.length > 0 ? parseInt(matches[matches.length - 1][1]) : 0;
                         if (birre > 0) {
                             await inserisciNelDB(db, data_ora, autore, nome_file, birre, "foto");
                         }
                         if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
                         await db.close();
                     });
-                    return; 
-                // 👇 FIXED VIDEO LOGIC FOR LIVE MESSAGES 👇
+                    return;
+                    // 👇 FIXED VIDEO LOGIC FOR LIVE MESSAGES 👇
                 } else if (tipo_file === "video") {
                     console.log(`\n🎬 [VIDEO RICEVUTO] L'utente ${autore} ha mandato una sgolata!`);
                     await inserisciNelDB(db, data_ora, autore, nome_file, 1, "video");
