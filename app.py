@@ -41,20 +41,12 @@ if df.empty:
     st.error("No data found! Looks like the keg is empty. Run `build_db.py` first.")
     st.stop()
 
+# Pulizia date
 df['data_ora_dt'] = pd.to_datetime(df['data_ora'], format='mixed', dayfirst=True, errors='coerce')
 
-# --- CALCOLO COERENTE DELLE BIRRE ---
-# Sommiamo i punti delle foto
-punti_foto = filtered_df[filtered_df['tipo_file'] == 'foto']['punti'].sum()
-
-# Ogni video conta esattamente come 1 birra per il totale globale
-punti_video = len(filtered_df[filtered_df['tipo_file'] == 'video'])
-
-# Il totale contato dal DB è la somma di questi due
-db_counted_beers = punti_foto + punti_video
-
-# Il totale storico include le "ghost beers" per allinearsi alla chat
-historical_total = db_counted_beers + ghost_beers
+# --- DEFINIZIONE GHOST BEERS (Necessaria per i calcoli successivi) ---
+current_db_total = df['punti'].sum()
+ghost_beers = CURRENT_OFFICIAL_TOTAL - current_db_total
 
 # ==========================================
 # ⏳ TIME MACHINE
@@ -73,15 +65,21 @@ selected_date = st.slider(
     format="DD/MM/YYYY"
 )
 
+# Qui creiamo filtered_df
 selected_datetime = pd.to_datetime(selected_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
 filtered_df = df[df['data_ora_dt'] <= selected_datetime].copy()
 
 # ==========================================
 # MATH & STATS
 # ==========================================
-db_counted_beers = filtered_df['punti'].sum()
+# 1. Calcolo coerente: Foto (punti variabili) + Video (sempre 1 birra)
+punti_foto = filtered_df[filtered_df['tipo_file'] == 'foto']['punti'].sum()
+punti_video = len(filtered_df[filtered_df['tipo_file'] == 'video'])
+
+db_counted_beers = punti_foto + punti_video
 historical_total = db_counted_beers + ghost_beers 
 
+# Metriche per i box
 total_videos = len(filtered_df[filtered_df['tipo_file'] == 'video'])
 record_upload = filtered_df['punti'].max() if not filtered_df.empty else 0
 
