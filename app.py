@@ -14,7 +14,7 @@ st.set_page_config(
     page_title="Project 1M Beers",
     page_icon="🍻",
     layout="wide",
-    initial_sidebar_state="expanded" 
+    initial_sidebar_state="collapsed" 
 )
 
 # Custom CSS to make metric text pop a bit more
@@ -86,34 +86,60 @@ current_db_total = totale_foto_db + totale_video_db
 ghost_beers = CURRENT_OFFICIAL_TOTAL - current_db_total
 
 # ==========================================
-# 4. SIDEBAR (TIME MACHINE & FILTERS)
+# 4. UI: HEADER & DAILY MVP
 # ==========================================
-with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/3256/3256083.png", width=80) # Icona decorativa
-    st.subheader("🕰️ The Time Machine")
-    st.write("Rewind time to see past stats!")
-    
-    min_date = df['data_ora_dt'].min().date() if not df['data_ora_dt'].isna().all() else datetime.date.today()
-    max_date = df['data_ora_dt'].max().date() if not df['data_ora_dt'].isna().all() else datetime.date.today()
+st.title("🍻 The 1 Million Beers Project")
+st.markdown("##### *One million pints. One legendary group. Zero regrets!* 🚀")
+st.write("")
 
-    selected_date = st.slider(
-        "Select Date:",
-        min_value=min_date,
-        max_value=max_date,
-        value=max_date,
-        format="DD/MM/YYYY",
-        label_visibility="collapsed"
-    )
-    
-    # Avviso UX per evitare panico
-    if selected_date < max_date:
-        st.warning(f"⚠️ **Time Travel Active:** Viewing data up to {selected_date.strftime('%b %d, %Y')}.")
+oggi = pd.Timestamp.now().date()
+df_oggi = df[df['data_ora_dt'].dt.date == oggi]
+
+# Container per l'MVP per farlo staccare dallo sfondo
+with st.container(border=True):
+    if not df_oggi.empty:
+        daily_counts = df_oggi.groupby('utente').size().reset_index(name='Uploads')
+        daily_counts = daily_counts.sort_values(by='Uploads', ascending=False).head(3).reset_index(drop=True)
+        
+        st.markdown("#### 🏆 Today's Top Drinkers")
+        cols = st.columns(len(daily_counts))
+        medals = ["🥇 1st", "🥈 2nd", "🥉 3rd"]
+        
+        for i, row in daily_counts.iterrows():
+            with cols[i]:
+                st.metric(label=medals[i], value=str(row['utente']), delta=f"{row['Uploads']} cheers", delta_color="off")
+    else:
+        st.info("😴 Nobody has had a drink yet today. Who will be the first to break the ice?")
+
+st.write("") 
+
+# ==========================================
+# 5. ⏳ TIME MACHINE
+# ==========================================
+st.divider()
+st.subheader("🕰️ The Time Machine")
+st.write("Rewind time to see past stats!")
+
+min_date = df['data_ora_dt'].min().date() if not df['data_ora_dt'].isna().all() else datetime.date.today()
+max_date = df['data_ora_dt'].max().date() if not df['data_ora_dt'].isna().all() else datetime.date.today()
+
+selected_date = st.slider(
+    "Select Date:",
+    min_value=min_date,
+    max_value=max_date,
+    value=max_date,
+    format="DD/MM/YYYY",
+    label_visibility="collapsed"
+)
+
+if selected_date < max_date:
+    st.warning(f"⚠️ **Time Travel Active:** Viewing data up to {selected_date.strftime('%b %d, %Y')}.")
 
 selected_datetime = pd.to_datetime(selected_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
 filtered_df = df[df['data_ora_dt'] <= selected_datetime].copy()
 
 # ==========================================
-# 5. CORE MATH & STATS
+# 6. CORE MATH & STATS
 # ==========================================
 punti_foto = filtered_df[filtered_df['tipo_file'] == 'foto']['punti'].sum()
 punti_video = len(filtered_df[filtered_df['tipo_file'] == 'video'])
@@ -146,39 +172,10 @@ if not filtered_df.empty and filtered_df['data_ora_dt'].notna().any():
     beers_this_week = weekly_df['punti'].sum()
 
 # ==========================================
-# 6. UI: HEADER & DAILY MVP
-# ==========================================
-st.title("🍻 The 1 Million Beers Project")
-st.markdown("##### *One million pints. One legendary group. Zero regrets!* 🚀")
-st.write("")
-
-oggi = pd.Timestamp.now().date()
-df_oggi = df[df['data_ora_dt'].dt.date == oggi]
-
-# Container per l'MVP per farlo staccare dallo sfondo
-with st.container(border=True):
-    if not df_oggi.empty:
-        daily_counts = df_oggi.groupby('utente').size().reset_index(name='Uploads')
-        daily_counts = daily_counts.sort_values(by='Uploads', ascending=False).head(3).reset_index(drop=True)
-        
-        st.markdown("#### 🏆 Today's Top Drinkers")
-        cols = st.columns(len(daily_counts))
-        medals = ["🥇 1st", "🥈 2nd", "🥉 3rd"]
-        
-        for i, row in daily_counts.iterrows():
-            with cols[i]:
-                st.metric(label=medals[i], value=str(row['utente']), delta=f"{row['Uploads']} cheers", delta_color="off")
-    else:
-        st.info("😴 Nobody has had a drink yet today. Who will be the first to break the ice?")
-
-st.write("") 
-
-# ==========================================
 # 7. UI: TOP METRICS & PROGRESS BARS
 # ==========================================
 with st.container(border=True):
     col1, col2, col3, col4 = st.columns(4)
-    # Aggiunti i tooltips (help=...)
     col1.metric(label="🏆 Estimated Global Count", value=f"{int(historical_total):,}", help="Includes ghost beers from WhatsApp history.")
     col2.metric(label="🔥 Group Pace (Beers/Day)", value=f"{beers_per_day:.1f}", help="Average speed since June 11, 2025.")
     col3.metric(label="🎬 Downs (Videos)", value=total_videos, help="A video is worth 5 points in the leaderboard!")
@@ -216,12 +213,7 @@ with col_left:
     with tab1:
         leaderboard = build_leaderboard(filtered_df, top_n=15)
         if not leaderboard.empty:
-            # UX: Coloriamo la tabella in base al punteggio!
-            st.dataframe(
-                leaderboard.style.background_gradient(subset=['Total Score'], cmap='Oranges'), 
-                use_container_width=True, 
-                hide_index=True
-            )
+            st.dataframe(leaderboard, use_container_width=True, hide_index=True)
         else:
             st.info("No data yet.")
         
@@ -229,11 +221,7 @@ with col_left:
         weekly_df_filtered = filtered_df[filtered_df['data_ora_dt'] >= (filtered_df['data_ora_dt'].max() - pd.Timedelta(days=7))]
         if not weekly_df_filtered.empty:
             w_leaderboard = build_leaderboard(weekly_df_filtered, top_n=10)
-            st.dataframe(
-                w_leaderboard.style.background_gradient(subset=['Total Score'], cmap='Oranges'), 
-                use_container_width=True, 
-                hide_index=True
-            )
+            st.dataframe(w_leaderboard, use_container_width=True, hide_index=True)
         else:
             st.info("No beers logged in the 7 days prior.")
     
@@ -249,11 +237,7 @@ with col_left:
             shame_df = shame_df[['utente', 'Days MIA', 'Last Pint']].rename(columns={'utente': 'Deserter'})
             
             if not shame_df.empty:
-                st.dataframe(
-                    shame_df.style.background_gradient(subset=['Days MIA'], cmap='Reds'), 
-                    use_container_width=True, 
-                    hide_index=True
-                )
+                st.dataframe(shame_df, use_container_width=True, hide_index=True)
             else:
                 st.success("Everyone has been drinking recently! It's a miracle!")
             
@@ -274,7 +258,7 @@ with col_right:
             if len(chart_data) == 0:
                 st.info("No timeline data available for the selected period.")
             elif len(chart_data) == 1:
-                st.bar_chart(chart_data, color="#FFA500") # Arancione birra
+                st.bar_chart(chart_data, color="#FFA500")
             else:
                 st.area_chart(chart_data, color="#FFA500")
         else:
@@ -295,7 +279,7 @@ with tab_time:
             filtered_df['Hour'] = filtered_df['data_ora_dt'].dt.hour
             hourly_stats = filtered_df.groupby('Hour')['punti'].sum()
             hourly_stats = hourly_stats.reindex(range(24), fill_value=0)
-            st.bar_chart(hourly_stats, color="#FFD700") # Oro
+            st.bar_chart(hourly_stats, color="#FFD700")
             
         with c2:
             st.markdown("**Best Day of the Week?**")
@@ -305,7 +289,7 @@ with tab_time:
             filtered_df['DayOfWeek'] = pd.Categorical(nomi_giorni, categories=days_order, ordered=True)
             
             day_stats = filtered_df.groupby('DayOfWeek', observed=False)['punti'].sum().reset_index()
-            st.bar_chart(day_stats, x='DayOfWeek', y='punti', color="#FF8C00") # Arancione scuro
+            st.bar_chart(day_stats, x='DayOfWeek', y='punti', color="#FF8C00")
 
 with tab_streaks:
     st.write("Consecutive days logging at least one beer. Who has the most resilient liver?")
@@ -323,11 +307,7 @@ with tab_streaks:
             top_streaks = top_streaks.sort_values(by='Consecutive Days', ascending=False).head(10)
             top_streaks.columns = ['Drinker', 'Max Streak (Days)']
             
-            st.dataframe(
-                top_streaks.style.background_gradient(subset=['Max Streak (Days)'], cmap='Greens'), 
-                use_container_width=True, 
-                hide_index=True
-            )
+            st.dataframe(top_streaks, use_container_width=True, hide_index=True)
         else:
             st.info("No streak data available yet.")
 
