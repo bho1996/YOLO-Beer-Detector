@@ -43,8 +43,18 @@ if df.empty:
 
 df['data_ora_dt'] = pd.to_datetime(df['data_ora'], format='mixed', dayfirst=True, errors='coerce')
 
-current_db_total = df['punti'].sum()
-ghost_beers = CURRENT_OFFICIAL_TOTAL - current_db_total
+# --- CALCOLO COERENTE DELLE BIRRE ---
+# Sommiamo i punti delle foto
+punti_foto = filtered_df[filtered_df['tipo_file'] == 'foto']['punti'].sum()
+
+# Ogni video conta esattamente come 1 birra per il totale globale
+punti_video = len(filtered_df[filtered_df['tipo_file'] == 'video'])
+
+# Il totale contato dal DB è la somma di questi due
+db_counted_beers = punti_foto + punti_video
+
+# Il totale storico include le "ghost beers" per allinearsi alla chat
+historical_total = db_counted_beers + ghost_beers
 
 # ==========================================
 # ⏳ TIME MACHINE
@@ -137,24 +147,29 @@ def build_leaderboard(df_to_use, top_n=15):
     if df_to_use.empty:
         return pd.DataFrame()
     
-    # Aggreghiamo i punti totali, le birre da foto e il conteggio dei video
-    totals = df_to_use.groupby('utente')['punti'].sum().rename('Total Score')
+    # 1. Somma punti dalle foto
     pints = df_to_use[df_to_use['tipo_file'] == 'foto'].groupby('utente')['punti'].sum().rename('Regular Pints')
-    downs = df_to_use[df_to_use['tipo_file'] == 'video'].groupby('utente').size().rename('Downs')
     
-    # Uniamo tutto in una singola tabella
-    lb = pd.concat([totals, pints, downs], axis=1).fillna(0).reset_index()
-    lb.rename(columns={'utente': 'Drinker'}, inplace=True)
+    # 2. Conta numero di video
+    num_downs = df_to_use[df_to_use['tipo_file'] == 'video'].groupby('utente').size().rename('Downs')
     
-    # Pulizia dei numeri (niente decimali)
+    # 3. Calcolo Punteggio Totale: Punti Foto + (Video * 5)
+    # Usiamo fillna(0) per chi ha solo foto o solo video
+    lb = pd.concat([pints, num_downs], axis=1).fillna(0)
+    lb['Total Score'] = lb['Regular Pints'] + (lb['Downs'] * 5)
+    
+    lb = lb.reset_index().rename(columns={'utente': 'Drinker'})
+    
+    # Ordiniamo per Total Score (quello con i bonus)
+    lb = lb.sort_values(by='Total Score', ascending=False).head(top_n)
+    
+    # Formattazione finale per la visualizzazione
     lb['Total Score'] = lb['Total Score'].astype(int)
     lb['Regular Pints'] = lb['Regular Pints'].astype(int)
     lb['Downs'] = lb['Downs'].astype(int)
     
-    # Ordiniamo e prendiamo la Top N
-    lb = lb.sort_values(by='Total Score', ascending=False).head(top_n)
     lb.index = range(1, len(lb) + 1)
-    return lb
+    return lb[['Drinker', 'Total Score', 'Regular Pints', 'Downs']]
 
 # --- MAIN DASHBOARD (LEADERBOARDS & CHARTS) ---
 col_left, col_right = st.columns([1, 1.5])
@@ -217,12 +232,18 @@ with tab_time:
             hourly_stats = hourly_stats.reindex(range(24), fill_value=0)
             st.bar_chart(hourly_stats)
             
-        with c2:
-            st.markdown("**Best Day of the Week?**")
-            filtered_df['DayOfWeek'] = filtered_df['data_ora_dt'].dt.day_name()
-            days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-            day_stats = filtered_df.groupby('DayOfWeek')['punti'].sum().reindex(days_order).fillna(0)
-            st.bar_chart(day_stats)
+with c2:
+    st.markdown("**Best Day of the Week?**")
+    # Ordine cronologico standard
+    days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    
+    # Assicurati che il nome del giorno sia estratto correttamente
+    filtered_df['DayOfWeek'] = filtered_df['data_ora_dt'].dt.day_name()
+    
+    # Raggruppa, riordina e riempi i giorni vuoti con 0
+    day_stats = filtered_df.groupby('DayOfWeek')['punti'].sum().reindex(days_order).fillna(0)
+    
+    st.bar_chart(day_stats)
 
 with tab_streaks:
     st.write("Consecutive days logging at least one beer. Who has the most resilient liver?")
