@@ -86,32 +86,18 @@ current_db_total = totale_foto_db + totale_video_db
 ghost_beers = CURRENT_OFFICIAL_TOTAL - current_db_total
 
 # ==========================================
-# 4. UI: HEADER & DAILY MVP
+# 4. UI: PRENOTAZIONE SPAZI VISIVI (Top Layout)
 # ==========================================
 st.title("🍻 The 1 Million Beers Project")
 st.markdown("##### *One million pints. One legendary group. Zero regrets!* 🚀")
 st.write("")
 
-oggi = pd.Timestamp.now().date()
-df_oggi = df[df['data_ora_dt'].dt.date == oggi]
-
-# Container per l'MVP per farlo staccare dallo sfondo
-with st.container(border=True):
-    if not df_oggi.empty:
-        daily_counts = df_oggi.groupby('utente').size().reset_index(name='Uploads')
-        daily_counts = daily_counts.sort_values(by='Uploads', ascending=False).head(3).reset_index(drop=True)
-        
-        st.markdown("#### 🏆 Today's Top Drinkers")
-        cols = st.columns(len(daily_counts))
-        medals = ["🥇 1st", "🥈 2nd", "🥉 3rd"]
-        
-        for i, row in daily_counts.iterrows():
-            with cols[i]:
-                st.metric(label=medals[i], value=str(row['utente']), delta=f"{row['Uploads']} cheers", delta_color="off")
-    else:
-        st.info("😴 Nobody has had a drink yet today. Who will be the first to break the ice?")
-
-st.write("") 
+# Creiamo le "scatole" vuote che riempiremo dopo i calcoli matematici
+top_metrics_container = st.container(border=True)
+st.write("")
+progress_container = st.container()
+st.write("")
+mvp_container = st.container(border=True)
 
 # ==========================================
 # 5. ⏳ TIME MACHINE
@@ -172,32 +158,53 @@ if not filtered_df.empty and filtered_df['data_ora_dt'].notna().any():
     beers_this_week = weekly_df['punti'].sum()
 
 # ==========================================
-# 7. UI: TOP METRICS & PROGRESS BARS
+# 7. RIEMPIMENTO DEI CONTENITORI (Top UI)
 # ==========================================
-with st.container(border=True):
+
+# 7A. Riempiamo le Top Metrics
+with top_metrics_container:
     col1, col2, col3, col4 = st.columns(4)
     col1.metric(label="🏆 Estimated Global Count", value=f"{int(historical_total):,}", help="Includes ghost beers from WhatsApp history.")
     col2.metric(label="🔥 Group Pace (Beers/Day)", value=f"{beers_per_day:.1f}", help="Average speed since June 11, 2025.")
     col3.metric(label="🎬 Downs (Videos)", value=total_videos, help="A video is worth 5 points in the leaderboard!")
     col4.metric(label="👑 Biggest Single Upload", value=int(record_upload) if pd.notna(record_upload) else 0, help="The largest amount of beers recognized in a single photo.")
 
-st.write("") 
+# 7B. Riempiamo le Progress Bars
+with progress_container:
+    prog_col1, prog_col2 = st.columns(2)
+    with prog_col1:
+        progress_global = min(historical_total / GOAL, 1.0) 
+        st.markdown(f"#### 🚀 The Journey: **{int(historical_total):,}** / {GOAL:,} ({progress_global * 100:.3f}%)")
+        st.progress(progress_global)
+        st.caption(eta_text)
 
-prog_col1, prog_col2 = st.columns(2)
-with prog_col1:
-    progress_global = min(historical_total / GOAL, 1.0) 
-    st.markdown(f"#### 🚀 The Journey: **{int(historical_total):,}** / {GOAL:,} ({progress_global * 100:.3f}%)")
-    st.progress(progress_global)
-    st.caption(eta_text)
+    with prog_col2:
+        progress_weekly = min(beers_this_week / WEEKLY_GOAL, 1.0)
+        st.markdown(f"#### 🗓️ Weekly Mission: **{int(beers_this_week)}** / {WEEKLY_GOAL}")
+        st.progress(progress_weekly)
+        if beers_this_week >= WEEKLY_GOAL:
+            st.caption("✅ **Weekly target smashed!** Awesome job team.")
+        else:
+            st.caption(f"Need **{int(WEEKLY_GOAL - beers_this_week)}** more pints to hit the target!")
 
-with prog_col2:
-    progress_weekly = min(beers_this_week / WEEKLY_GOAL, 1.0)
-    st.markdown(f"#### 🗓️ Weekly Mission: **{int(beers_this_week)}** / {WEEKLY_GOAL}")
-    st.progress(progress_weekly)
-    if beers_this_week >= WEEKLY_GOAL:
-        st.caption("✅ **Weekly target smashed!** Awesome job team.")
+# 7C. Riempiamo il Daily MVP
+with mvp_container:
+    oggi = pd.Timestamp.now().date()
+    df_oggi = df[df['data_ora_dt'].dt.date == oggi]
+
+    if not df_oggi.empty:
+        daily_counts = df_oggi.groupby('utente').size().reset_index(name='Uploads')
+        daily_counts = daily_counts.sort_values(by='Uploads', ascending=False).head(3).reset_index(drop=True)
+        
+        st.markdown("#### 🏆 Today's Top Drinkers")
+        cols = st.columns(len(daily_counts))
+        medals = ["🥇 1st", "🥈 2nd", "🥉 3rd"]
+        
+        for i, row in daily_counts.iterrows():
+            with cols[i]:
+                st.metric(label=medals[i], value=str(row['utente']), delta=f"{row['Uploads']} cheers", delta_color="off")
     else:
-        st.caption(f"Need **{int(WEEKLY_GOAL - beers_this_week)}** more pints to hit the target!")
+        st.info("😴 Nobody has had a drink yet today. Who will be the first to break the ice?")
 
 st.divider()
 
