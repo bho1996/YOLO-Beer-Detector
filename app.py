@@ -120,28 +120,23 @@ oggi = pd.Timestamp.now().date()
 df_oggi = df[df['data_ora_dt'].dt.date == oggi]
 
 if not df_oggi.empty:
-    # Contiamo gli upload per utente e prendiamo i primi 3
+    # Count uploads (cheers) per user and get the top 3
     daily_counts = df_oggi.groupby('utente').size().reset_index(name='Uploads')
-    daily_counts = daily_counts.sort_values(by='Uploads', ascending=False).head(3)
-    daily_counts = daily_counts.reset_index(drop=True)
+    daily_counts = daily_counts.sort_values(by='Uploads', ascending=False).head(3).reset_index(drop=True)
     
-    st.success("🔥 Today's drinking session is live! The daily race is on.")
+    st.markdown("#### 🏆 Today's Top Drinkers")
     
-    # Il menu a tendina per la privacy: mostra i nomi solo se cliccato
-    with st.expander("👀 Click here to reveal today's Top 3 MVPs"):
-        medals = ["🥇 1st Place", "🥈 2nd Place", "🥉 3rd Place"]
-        # Creiamo un numero di colonne pari a quanti utenti hanno bevuto oggi (max 3)
-        cols = st.columns(len(daily_counts))
-        
-        for i, row in daily_counts.iterrows():
-            with cols[i]:
-                # Mostriamo Medaglia, Nome e Numero di Brindisi
-                st.metric(
-                    label=medals[i], 
-                    value=str(row['utente']), 
-                    delta=f"{row['Uploads']} cheers", 
-                    delta_color="off"
-                )
+    cols = st.columns(len(daily_counts))
+    medals = ["🥇 1st", "🥈 2nd", "🥉 3rd"]
+    
+    for i, row in daily_counts.iterrows():
+        with cols[i]:
+            st.metric(
+                label=medals[i], 
+                value=str(row['utente']), 
+                delta=f"{row['Uploads']} cheers",
+                delta_color="off"
+            )
 else:
     st.info("😴 Nobody has had a drink yet today. Who will be the first to break the ice?")
 
