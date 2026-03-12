@@ -232,16 +232,19 @@ with tab_time:
             
 with c2:
     st.markdown("**Best Day of the Week?**")
-    # Ordine cronologico standard
     days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
     
-    # Assicurati che il nome del giorno sia estratto correttamente
-    filtered_df['DayOfWeek'] = filtered_df['data_ora_dt'].dt.day_name()
+    # 1. Estraiamo il nome del giorno
+    nomi_giorni = filtered_df['data_ora_dt'].dt.day_name()
     
-    # Raggruppa, riordina e riempi i giorni vuoti con 0
-    day_stats = filtered_df.groupby('DayOfWeek')['punti'].sum().reindex(days_order).fillna(0)
+    # 2. TRUCCO: Lo trasformiamo in una Categoria con un ordine blindato
+    filtered_df['DayOfWeek'] = pd.Categorical(nomi_giorni, categories=days_order, ordered=True)
     
-    st.bar_chart(day_stats)
+    # 3. Raggruppiamo. Usiamo reset_index() per avere una tabella pulita
+    day_stats = filtered_df.groupby('DayOfWeek', observed=False)['punti'].sum().reset_index()
+    
+    # 4. Diciamo a Streamlit esattamente cosa mettere su X e Y
+    st.bar_chart(day_stats, x='DayOfWeek', y='punti')
 
 with tab_streaks:
     st.write("Consecutive days logging at least one beer. Who has the most resilient liver?")
