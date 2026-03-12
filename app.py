@@ -325,15 +325,26 @@ with tab_milestones:
         else:
             st.info("No new 500-beer milestones hit in the recorded history yet!")
 
+            # --- DAILY MVP (Eroe del Giorno) ---
+oggi = pd.Timestamp.now().date()
+df_oggi = df[df['data_ora_dt'].dt.date == oggi] # Usa df completo, non filtrato
+
+if not df_oggi.empty:
+    mvp_oggi = df_oggi.groupby('utente')['punti'].sum().idxmax()
+    birre_mvp = df_oggi.groupby('utente')['punti'].sum().max()
+    st.success(f"👑 **DAILY MVP:** {mvp_oggi} sta dominando oggi con {int(birre_mvp)} birre! Qualcuno vuole sfidarlo?")
+else:
+    st.info("😴 Nessuno ha ancora bevuto oggi. Chi sarà il primo a sbloccare la giornata?")
+
 # ==========================================
 # 🕵️ PLAYER SPOTLIGHT & DEBUGGER
 # ==========================================
 st.divider()
-st.subheader("🕵️ Player Spotlight & Debugger")
-st.write("Search for a user to see their stats and find out exactly where their points come from.")
+st.subheader("🕵️ Player Spotlight & Rivalry")
+st.write("Cerca un utente per vedere le sue statistiche e chi deve battere!")
 
 all_users = sorted(filtered_df['utente'].unique()) if not filtered_df.empty else []
-selected_user = st.selectbox("Select a legend:", all_users)
+selected_user = st.selectbox("Seleziona una leggenda:", all_users)
 
 if selected_user:
     with st.container(border=True):
@@ -343,6 +354,29 @@ if selected_user:
         user_videos = len(user_df[user_df['tipo_file'] == 'video'])
         avg_beers = user_total / user_uploads if user_uploads > 0 else 0
         
+        # --- CALCOLO RIVALITÀ (Preda e Cacciatore) ---
+        lb_completa = build_leaderboard(filtered_df, top_n=1000)
+        
+        # Puliamo le medaglie dal nome per il confronto
+        lb_completa['Drinker_Clean'] = lb_completa['Drinker'].astype(str).str.replace(r'[🥇🥈🥉]\s', '', regex=True)
+        
+        try:
+            user_rank = lb_completa[lb_completa['Drinker_Clean'] == selected_user].index[0]
+            user_score = lb_completa.loc[user_rank, 'Total Score']
+            
+            if user_rank == 1:
+                rivalry_text = "👑 **Sei il RE incontrastato.** Tutti ti stanno dando la caccia."
+            else:
+                target_score = lb_completa.loc[user_rank - 1, 'Total Score']
+                target_name = lb_completa.loc[user_rank - 1, 'Drinker_Clean']
+                diff = target_score - user_score
+                rivalry_text = f"🎯 **Target acquisito:** Ti mancano solo **{int(diff) + 1} punti** per superare {target_name}!"
+        except:
+            rivalry_text = "📊 Bevi di più per entrare nei radar della classifica!"
+
+        st.info(rivalry_text)
+        # ----------------------------------------------
+        
         ucol1, ucol2, ucol3, ucol4 = st.columns(4)
         ucol1.metric("🍻 Logged Beers", int(user_total))
         ucol2.metric("📸 Photos Uploaded", user_uploads)
@@ -350,8 +384,6 @@ if selected_user:
         ucol4.metric("🎬 Downs", user_videos)
         
         with st.expander("🔎 View detailed log (Debugger)"):
-            st.markdown(f"### Point Analysis for {selected_user}")
-            st.write("Below you can see every single message that generated points for this user. Check the date and file to spot any errors!")
             debug_table = user_df.sort_values(by='data_ora_dt', ascending=False)[['data_ora', 'punti', 'tipo_file', 'nome_file']]
             debug_table.columns = ['Date & Time', 'Points Awarded', 'File Type', 'File Name']
             st.dataframe(debug_table, width='stretch')
