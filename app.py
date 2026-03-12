@@ -170,6 +170,9 @@ def build_leaderboard(df_to_use, top_n=15):
     lb['Downs'] = lb['Downs'].astype(int)
     
     lb.index = range(1, len(lb) + 1)
+    if len(lb) > 0: lb.loc[1, 'Drinker'] = "🥇 " + str(lb.loc[1, 'Drinker'])
+    if len(lb) > 1: lb.loc[2, 'Drinker'] = "🥈 " + str(lb.loc[2, 'Drinker'])
+    if len(lb) > 2: lb.loc[3, 'Drinker'] = "🥉 " + str(lb.loc[3, 'Drinker'])
     return lb[['Drinker', 'Total Score', 'Regular Pints', 'Downs']]
 
 # --- MAIN DASHBOARD (LEADERBOARDS & CHARTS) ---
@@ -177,7 +180,7 @@ col_left, col_right = st.columns([1, 1.5])
 
 with col_left:
     st.subheader("🏅 Hall of Fame")
-    tab1, tab2, tab3 = st.tabs(["🌟 Legends", "🔥 7-Day Heroes", "🛠️ Nerd Stats"])
+    tab1, tab2, tab3, tab4 = st.tabs(["🌟 Legends", "🔥 7-Day Heroes", "🏜️ Wall of Shame", "🛠️ Nerd Stats"])
     
     with tab1:
         leaderboard = build_leaderboard(filtered_df, top_n=15)
@@ -192,8 +195,27 @@ with col_left:
             st.dataframe(w_leaderboard, width='stretch')
         else:
             st.info("No beers logged in the 7 days prior.")
-            
+    
     with tab3:
+        st.write("Friends don't let friends stay sober. Chi non beve da più tempo?")
+        if not filtered_df.empty:
+            last_seen = filtered_df.groupby('utente')['data_ora_dt'].max().reset_index()
+            # Calcoliamo i giorni di astinenza
+            last_seen['Days MIA'] = (pd.Timestamp.now() - last_seen['data_ora_dt']).dt.days
+            
+            # Filtriamo chi manca da almeno 3 giorni e ordiniamo
+            shame_df = last_seen[last_seen['Days MIA'] > 2].sort_values(by='Days MIA', ascending=False).head(10)
+            shame_df['Last Pint'] = shame_df['data_ora_dt'].dt.strftime('%d %b %Y')
+            
+            shame_df = shame_df[['utente', 'Days MIA', 'Last Pint']].rename(columns={'utente': 'Deserter'})
+            shame_df.index = range(1, len(shame_df) + 1)
+            
+            if not shame_df.empty:
+                st.dataframe(shame_df, width='stretch')
+            else:
+                st.success("Tutti hanno bevuto di recente! Miracolo!")
+            
+    with tab4:
         st.write("Want to know why the Official Count is higher than the Database?")
         st.write(f"The DB counted **{int(current_db_total)}** points from photos and videos.")
         st.write(f"The remaining **{int(ghost_beers)}** beers were either lost in the WhatsApp export limit, or logged without a photo!")
@@ -233,21 +255,21 @@ with tab_time:
             hourly_stats = hourly_stats.reindex(range(24), fill_value=0)
             st.bar_chart(hourly_stats)
             
-with c2:
-    st.markdown("**Best Day of the Week?**")
-    days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    
-    # 1. Estraiamo il nome del giorno
-    nomi_giorni = filtered_df['data_ora_dt'].dt.day_name()
-    
-    # 2. TRUCCO: Lo trasformiamo in una Categoria con un ordine blindato
-    filtered_df['DayOfWeek'] = pd.Categorical(nomi_giorni, categories=days_order, ordered=True)
-    
-    # 3. Raggruppiamo. Usiamo reset_index() per avere una tabella pulita
-    day_stats = filtered_df.groupby('DayOfWeek', observed=False)['punti'].sum().reset_index()
-    
-    # 4. Diciamo a Streamlit esattamente cosa mettere su X e Y
-    st.bar_chart(day_stats, x='DayOfWeek', y='punti')
+    with c2:
+        st.markdown("**Best Day of the Week?**")
+        days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        
+        # 1. Estraiamo il nome del giorno
+        nomi_giorni = filtered_df['data_ora_dt'].dt.day_name()
+        
+        # 2. TRUCCO: Lo trasformiamo in una Categoria con un ordine blindato
+        filtered_df['DayOfWeek'] = pd.Categorical(nomi_giorni, categories=days_order, ordered=True)
+        
+        # 3. Raggruppiamo. Usiamo reset_index() per avere una tabella pulita
+        day_stats = filtered_df.groupby('DayOfWeek', observed=False)['punti'].sum().reset_index()
+        
+        # 4. Diciamo a Streamlit esattamente cosa mettere su X e Y
+        st.bar_chart(day_stats, x='DayOfWeek', y='punti')
 
 with tab_streaks:
     st.write("Consecutive days logging at least one beer. Who has the most resilient liver?")
