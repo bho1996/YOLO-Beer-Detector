@@ -22,7 +22,7 @@ def load_data():
         conn = sqlite3.connect("1m_beers.db")
         df = pd.read_sql_query("SELECT * FROM log_birre", conn)
         
-        # Carichiamo il Totale Ufficiale estratto dalla chat
+        # Load the Official Total extracted from the chat
         config_df = pd.read_sql_query("SELECT valore FROM config WHERE chiave='OFFICIAL_TOTAL'", conn)
         official_total = config_df['valore'].iloc[0] if not config_df.empty else 17500
         
@@ -41,10 +41,10 @@ if df.empty:
     st.error("No data found! Looks like the keg is empty. Run `build_db.py` first.")
     st.stop()
 
-# Pulizia date
+# Date cleaning
 df['data_ora_dt'] = pd.to_datetime(df['data_ora'], format='mixed', dayfirst=True, errors='coerce')
 
-# --- DEFINIZIONE GHOST BEERS (Necessaria per i calcoli successivi) ---
+# --- DEFINITION OF GHOST BEERS ---
 totale_foto_db = df[df['tipo_file'] == 'foto']['punti'].sum()
 totale_video_db = len(df[df['tipo_file'] == 'video'])
 
@@ -52,54 +52,28 @@ current_db_total = totale_foto_db + totale_video_db
 ghost_beers = CURRENT_OFFICIAL_TOTAL - current_db_total
 
 # ==========================================
-# ⏳ TIME MACHINE
-# ==========================================
-st.divider()
-st.subheader("🕰️ The Time Machine")
-
-min_date = df['data_ora_dt'].min().date() if not df['data_ora_dt'].isna().all() else datetime.date.today()
-max_date = df['data_ora_dt'].max().date() if not df['data_ora_dt'].isna().all() else datetime.date.today()
-
-selected_date = st.slider(
-    "Drag the slider back in time to see the stats exactly as they were on that day:",
-    min_value=min_date,
-    max_value=max_date,
-    value=max_date,
-    format="DD/MM/YYYY"
-)
-
-# Qui creiamo filtered_df
-selected_datetime = pd.to_datetime(selected_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-filtered_df = df[df['data_ora_dt'] <= selected_datetime].copy()
-
-# ==========================================
 # MATH & STATS
 # ==========================================
-# 1. Calcolo coerente: Foto (punti variabili) + Video (sempre 1 birra)
-punti_foto = filtered_df[filtered_df['tipo_file'] == 'foto']['punti'].sum()
-punti_video = len(filtered_df[filtered_df['tipo_file'] == 'video'])
+punti_foto = df[df['tipo_file'] == 'foto']['punti'].sum()
+punti_video = len(df[df['tipo_file'] == 'video'])
 
 db_counted_beers = punti_foto + punti_video
 historical_total = db_counted_beers + ghost_beers 
 
-# Metriche per i box
-total_videos = len(filtered_df[filtered_df['tipo_file'] == 'video'])
-record_upload = filtered_df['punti'].max() if not filtered_df.empty else 0
+total_videos = len(df[df['tipo_file'] == 'video'])
+record_upload = df['punti'].max() if not df.empty else 0
 
 eta_text = "ETA: Keep drinking to calculate..."
 beers_per_day = 0
 beers_this_week = 0
 
-if not filtered_df.empty and filtered_df['data_ora_dt'].notna().any():
-    # 🌟 NOVITÀ: Usiamo la VERA data di inizio del gruppo
+if not df.empty and df['data_ora_dt'].notna().any():
     vero_inizio_gruppo = pd.to_datetime("2025-06-11")
-    last_date = filtered_df['data_ora_dt'].max()
+    last_date = df['data_ora_dt'].max()
     
-    # Calcoliamo quanti giorni sono passati dalla creazione a oggi
     giorni_totali_veri = (last_date - vero_inizio_gruppo).days
     
     if giorni_totali_veri > 0 and historical_total > 0:
-        # Calcoliamo la VERA velocità media (usando tutte le birre, anche le ghost)
         beers_per_day = historical_total / giorni_totali_veri
         
         if beers_per_day > 0:
@@ -109,7 +83,7 @@ if not filtered_df.empty and filtered_df['data_ora_dt'].notna().any():
             eta_text = f"🎯 **Milestone ETA:** {eta_date.strftime('%B %Y')}"
             
     seven_days_ago = last_date - pd.Timedelta(days=7)
-    weekly_df = filtered_df[filtered_df['data_ora_dt'] >= seven_days_ago]
+    weekly_df = df[df['data_ora_dt'] >= seven_days_ago]
     beers_this_week = weekly_df['punti'].sum()
 
 # --- TOP METRICS ---
@@ -139,32 +113,55 @@ with prog_col2:
     else:
         st.caption(f"Need **{int(WEEKLY_GOAL - beers_this_week)}** more pints to hit the target!")
 
-st.divider()
+st.write("")
+
+# --- DAILY MVP (Hero of the Day) ---
+oggi = pd.Timestamp.now().date()
+df_oggi = df[df['data_ora_dt'].dt.date == oggi]
+
+if not df_oggi.empty:
+    mvp_oggi = df_oggi.groupby('utente')['punti'].sum().idxmax()
+    birre_mvp = df_oggi.groupby('utente')['punti'].sum().max()
+    st.success(f"👑 **DAILY MVP:** {mvp_oggi} is dominating today with {int(birre_mvp)} beers! Anyone want to challenge them?")
+else:
+    st.info("😴 Nobody has had a drink yet today. Who will be the first to break the ice?")
 
 # ==========================================
-# FUNZIONE CLASSIFICA DETTAGLIATA
+# ⏳ TIME MACHINE
+# ==========================================
+st.divider()
+st.subheader("🕰️ The Time Machine")
+
+min_date = df['data_ora_dt'].min().date() if not df['data_ora_dt'].isna().all() else datetime.date.today()
+max_date = df['data_ora_dt'].max().date() if not df['data_ora_dt'].isna().all() else datetime.date.today()
+
+selected_date = st.slider(
+    "Drag the slider back in time to see the stats exactly as they were on that day:",
+    min_value=min_date,
+    max_value=max_date,
+    value=max_date,
+    format="DD/MM/YYYY"
+)
+
+selected_datetime = pd.to_datetime(selected_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+filtered_df = df[df['data_ora_dt'] <= selected_datetime].copy()
+
+# ==========================================
+# LEADERBOARD FUNCTION
 # ==========================================
 def build_leaderboard(df_to_use, top_n=15):
     if df_to_use.empty:
         return pd.DataFrame()
     
-    # 1. Somma punti dalle foto
     pints = df_to_use[df_to_use['tipo_file'] == 'foto'].groupby('utente')['punti'].sum().rename('Regular Pints')
-    
-    # 2. Conta numero di video
     num_downs = df_to_use[df_to_use['tipo_file'] == 'video'].groupby('utente').size().rename('Downs')
     
-    # 3. Calcolo Punteggio Totale: Punti Foto + (Video * 5)
-    # Usiamo fillna(0) per chi ha solo foto o solo video
     lb = pd.concat([pints, num_downs], axis=1).fillna(0)
     lb['Total Score'] = lb['Regular Pints'] + (lb['Downs'] * 5)
     
     lb = lb.reset_index().rename(columns={'utente': 'Drinker'})
-    
-    # Ordiniamo per Total Score (quello con i bonus)
     lb = lb.sort_values(by='Total Score', ascending=False).head(top_n)
     
-    # Formattazione finale per la visualizzazione
     lb['Total Score'] = lb['Total Score'].astype(int)
     lb['Regular Pints'] = lb['Regular Pints'].astype(int)
     lb['Downs'] = lb['Downs'].astype(int)
@@ -190,20 +187,19 @@ with col_left:
             st.info("No data yet.")
         
     with tab2:
-        if 'weekly_df' in locals() and not weekly_df.empty:
-            w_leaderboard = build_leaderboard(weekly_df, top_n=10)
+        weekly_df_filtered = filtered_df[filtered_df['data_ora_dt'] >= (filtered_df['data_ora_dt'].max() - pd.Timedelta(days=7))]
+        if not weekly_df_filtered.empty:
+            w_leaderboard = build_leaderboard(weekly_df_filtered, top_n=10)
             st.dataframe(w_leaderboard, width='stretch')
         else:
             st.info("No beers logged in the 7 days prior.")
     
     with tab3:
-        st.write("Friends don't let friends stay sober. Chi non beve da più tempo?")
+        st.write("Friends don't let friends stay sober. Who hasn't had a drink in the longest time?")
         if not filtered_df.empty:
             last_seen = filtered_df.groupby('utente')['data_ora_dt'].max().reset_index()
-            # Calcoliamo i giorni di astinenza
             last_seen['Days MIA'] = (pd.Timestamp.now() - last_seen['data_ora_dt']).dt.days
             
-            # Filtriamo chi manca da almeno 3 giorni e ordiniamo
             shame_df = last_seen[last_seen['Days MIA'] > 2].sort_values(by='Days MIA', ascending=False).head(10)
             shame_df['Last Pint'] = shame_df['data_ora_dt'].dt.strftime('%d %b %Y')
             
@@ -213,7 +209,7 @@ with col_left:
             if not shame_df.empty:
                 st.dataframe(shame_df, width='stretch')
             else:
-                st.success("Tutti hanno bevuto di recente! Miracolo!")
+                st.success("Everyone has been drinking recently! It's a miracle!")
             
     with tab4:
         st.write("Want to know why the Official Count is higher than the Database?")
@@ -255,21 +251,15 @@ with tab_time:
             hourly_stats = hourly_stats.reindex(range(24), fill_value=0)
             st.bar_chart(hourly_stats)
             
-    with c2:
-        st.markdown("**Best Day of the Week?**")
-        days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-        
-        # 1. Estraiamo il nome del giorno
-        nomi_giorni = filtered_df['data_ora_dt'].dt.day_name()
-        
-        # 2. TRUCCO: Lo trasformiamo in una Categoria con un ordine blindato
-        filtered_df['DayOfWeek'] = pd.Categorical(nomi_giorni, categories=days_order, ordered=True)
-        
-        # 3. Raggruppiamo. Usiamo reset_index() per avere una tabella pulita
-        day_stats = filtered_df.groupby('DayOfWeek', observed=False)['punti'].sum().reset_index()
-        
-        # 4. Diciamo a Streamlit esattamente cosa mettere su X e Y
-        st.bar_chart(day_stats, x='DayOfWeek', y='punti')
+        with c2:
+            st.markdown("**Best Day of the Week?**")
+            days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+            
+            nomi_giorni = filtered_df['data_ora_dt'].dt.day_name()
+            filtered_df['DayOfWeek'] = pd.Categorical(nomi_giorni, categories=days_order, ordered=True)
+            
+            day_stats = filtered_df.groupby('DayOfWeek', observed=False)['punti'].sum().reset_index()
+            st.bar_chart(day_stats, x='DayOfWeek', y='punti')
 
 with tab_streaks:
     st.write("Consecutive days logging at least one beer. Who has the most resilient liver?")
@@ -325,26 +315,15 @@ with tab_milestones:
         else:
             st.info("No new 500-beer milestones hit in the recorded history yet!")
 
-            # --- DAILY MVP (Eroe del Giorno) ---
-oggi = pd.Timestamp.now().date()
-df_oggi = df[df['data_ora_dt'].dt.date == oggi] # Usa df completo, non filtrato
-
-if not df_oggi.empty:
-    mvp_oggi = df_oggi.groupby('utente')['punti'].sum().idxmax()
-    birre_mvp = df_oggi.groupby('utente')['punti'].sum().max()
-    st.success(f"👑 **DAILY MVP:** {mvp_oggi} sta dominando oggi con {int(birre_mvp)} birre! Qualcuno vuole sfidarlo?")
-else:
-    st.info("😴 Nessuno ha ancora bevuto oggi. Chi sarà il primo a sbloccare la giornata?")
-
 # ==========================================
 # 🕵️ PLAYER SPOTLIGHT & DEBUGGER
 # ==========================================
 st.divider()
 st.subheader("🕵️ Player Spotlight & Rivalry")
-st.write("Cerca un utente per vedere le sue statistiche e chi deve battere!")
+st.write("Search for a user to see their stats and who they need to beat!")
 
 all_users = sorted(filtered_df['utente'].unique()) if not filtered_df.empty else []
-selected_user = st.selectbox("Seleziona una leggenda:", all_users)
+selected_user = st.selectbox("Select a legend:", all_users)
 
 if selected_user:
     with st.container(border=True):
@@ -354,10 +333,10 @@ if selected_user:
         user_videos = len(user_df[user_df['tipo_file'] == 'video'])
         avg_beers = user_total / user_uploads if user_uploads > 0 else 0
         
-        # --- CALCOLO RIVALITÀ (Preda e Cacciatore) ---
+        # --- RIVALRY CALCULATION (Hunter and Prey) ---
         lb_completa = build_leaderboard(filtered_df, top_n=1000)
         
-        # Puliamo le medaglie dal nome per il confronto
+        # Clean medals from the name for comparison
         lb_completa['Drinker_Clean'] = lb_completa['Drinker'].astype(str).str.replace(r'[🥇🥈🥉]\s', '', regex=True)
         
         try:
@@ -365,14 +344,14 @@ if selected_user:
             user_score = lb_completa.loc[user_rank, 'Total Score']
             
             if user_rank == 1:
-                rivalry_text = "👑 **Sei il RE incontrastato.** Tutti ti stanno dando la caccia."
+                rivalry_text = "👑 **You are the undisputed KING.** Everyone is hunting you down."
             else:
                 target_score = lb_completa.loc[user_rank - 1, 'Total Score']
                 target_name = lb_completa.loc[user_rank - 1, 'Drinker_Clean']
                 diff = target_score - user_score
-                rivalry_text = f"🎯 **Target acquisito:** Ti mancano solo **{int(diff) + 1} punti** per superare {target_name}!"
+                rivalry_text = f"🎯 **Target acquired:** You only need **{int(diff) + 1} points** to overtake {target_name}!"
         except:
-            rivalry_text = "📊 Bevi di più per entrare nei radar della classifica!"
+            rivalry_text = "📊 Drink more to get on the leaderboard radar!"
 
         st.info(rivalry_text)
         # ----------------------------------------------
