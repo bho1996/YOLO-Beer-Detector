@@ -127,12 +127,20 @@ filtered_df = df[df['data_ora_dt'] <= selected_datetime].copy()
 # ==========================================
 # 6. CORE MATH & STATS
 # ==========================================
-punti_foto = filtered_df[filtered_df['tipo_file'] == 'foto']['punti'].sum()
-punti_video = len(filtered_df[filtered_df['tipo_file'] == 'video'])
+punti_foto_filtrati = filtered_df[filtered_df['tipo_file'] == 'foto']['punti'].sum()
+punti_video_filtrati = len(filtered_df[filtered_df['tipo_file'] == 'video'])
 
-db_counted_beers = punti_foto + punti_video
-historical_total = db_counted_beers + ghost_beers 
+# 1. Il totale storico filtrato (per i grafici e il passato)
+db_counted_beers_filtered = punti_foto_filtrati + punti_video_filtrati
+historical_total_filtered = db_counted_beers_filtered + ghost_beers 
 
+# 2. Il totale REALE ATTUALE (quello che deve stare nel box in alto)
+# Usiamo il DF originale non filtrato per non perdere punti per strada
+punti_foto_real = df[df['tipo_file'] == 'foto']['punti'].sum()
+punti_video_real = len(df[df['tipo_file'] == 'video'])
+real_total_now = punti_foto_real + punti_video_real + ghost_beers
+
+# Metriche per i box
 total_videos = len(filtered_df[filtered_df['tipo_file'] == 'video'])
 record_upload = filtered_df['punti'].max() if not filtered_df.empty else 0
 
@@ -164,7 +172,7 @@ if not filtered_df.empty and filtered_df['data_ora_dt'].notna().any():
 # 7A. Riempiamo le Top Metrics
 with top_metrics_container:
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric(label="🏆 Estimated Global Count", value=f"{int(historical_total):,}", help="Includes ghost beers from WhatsApp history.")
+    col1.metric(label="🏆 Estimated Global Count", value=f"{int(real_total_now):,}", help="The absolute current total (Official + DB).")
     col2.metric(label="🔥 Group Pace (Beers/Day)", value=f"{beers_per_day:.1f}", help="Average speed since June 11, 2025.")
     col3.metric(label="🎬 Downs (Videos)", value=total_videos, help="A video is worth 5 points in the leaderboard!")
     col4.metric(label="👑 Biggest Single Upload", value=int(record_upload) if pd.notna(record_upload) else 0, help="The largest amount of beers recognized in a single photo.")
