@@ -50,7 +50,7 @@ def build_leaderboard(df_to_use, top_n=15):
     if df_to_use.empty:
         return pd.DataFrame()
     
-    pints = df_to_use[df_to_use['tipo_file'] == 'foto'].groupby('utente')['punti'].sum().rename('Regular Pints')
+    pints = df_to_use[df_to_use['tipo_file'] == 'foto'].groupby('utente')['points'].sum().rename('Regular Pints')
     num_downs = df_to_use[df_to_use['tipo_file'] == 'video'].groupby('utente').size().rename('Downs')
     
     lb = pd.concat([pints, num_downs], axis=1).fillna(0)
@@ -80,7 +80,7 @@ if df.empty:
 
 df['data_ora_dt'] = pd.to_datetime(df['data_ora'], format='mixed', dayfirst=True, errors='coerce')
 
-totale_foto_db = df[df['tipo_file'] == 'foto']['punti'].sum()
+totale_foto_db = df[df['tipo_file'] == 'foto']['points'].sum()
 totale_video_db = len(df[df['tipo_file'] == 'video'])
 current_db_total = totale_foto_db + totale_video_db
 ghost_beers = CURRENT_OFFICIAL_TOTAL - current_db_total
@@ -127,14 +127,14 @@ filtered_df = df[df['data_ora_dt'] <= selected_datetime].copy()
 # ==========================================
 # 6. CORE MATH & STATS
 # ==========================================
-punti_foto = filtered_df[filtered_df['tipo_file'] == 'foto']['punti'].sum()
-punti_video = len(filtered_df[filtered_df['tipo_file'] == 'video'])
+points_foto = filtered_df[filtered_df['tipo_file'] == 'foto']['points'].sum()
+points_video = len(filtered_df[filtered_df['tipo_file'] == 'video'])
 
-db_counted_beers = punti_foto + punti_video
+db_counted_beers = points_foto + points_video
 historical_total = db_counted_beers + ghost_beers 
 
 total_videos = len(filtered_df[filtered_df['tipo_file'] == 'video'])
-record_upload = filtered_df['punti'].max() if not filtered_df.empty else 0
+record_upload = filtered_df['points'].max() if not filtered_df.empty else 0
 
 eta_text = "ETA: Keep drinking to calculate..."
 beers_per_day = 0
@@ -155,7 +155,7 @@ if not filtered_df.empty and filtered_df['data_ora_dt'].notna().any():
             
     seven_days_ago = last_date - pd.Timedelta(days=7)
     weekly_df = filtered_df[filtered_df['data_ora_dt'] >= seven_days_ago]
-    beers_this_week = weekly_df['punti'].sum()
+    beers_this_week = weekly_df['points'].sum()
 
 # ==========================================
 # 7. RIEMPIMENTO DEI CONTENITORI (Top UI)
@@ -258,8 +258,8 @@ with col_right:
     with st.container(border=True):
         if not filtered_df.empty and filtered_df['data_ora_dt'].notna().any():
             filtered_df['Date'] = filtered_df['data_ora_dt'].dt.normalize()
-            daily_beers = filtered_df.groupby('Date')['punti'].sum().reset_index()
-            daily_beers['Cumulative'] = daily_beers['punti'].cumsum() + ghost_beers
+            daily_beers = filtered_df.groupby('Date')['points'].sum().reset_index()
+            daily_beers['Cumulative'] = daily_beers['points'].cumsum() + ghost_beers
             chart_data = daily_beers.set_index('Date')[['Cumulative']]
             
             if len(chart_data) == 0:
@@ -284,7 +284,7 @@ with tab_time:
         with c1:
             st.markdown("**When do we drink? (Hour of the Day)**")
             filtered_df['Hour'] = filtered_df['data_ora_dt'].dt.hour
-            hourly_stats = filtered_df.groupby('Hour')['punti'].sum()
+            hourly_stats = filtered_df.groupby('Hour')['points'].sum()
             hourly_stats = hourly_stats.reindex(range(24), fill_value=0)
             st.bar_chart(hourly_stats, color="#FFD700")
             
@@ -295,8 +295,8 @@ with tab_time:
             nomi_giorni = filtered_df['data_ora_dt'].dt.day_name()
             filtered_df['DayOfWeek'] = pd.Categorical(nomi_giorni, categories=days_order, ordered=True)
             
-            day_stats = filtered_df.groupby('DayOfWeek', observed=False)['punti'].sum().reset_index()
-            st.bar_chart(day_stats, x='DayOfWeek', y='punti', color="#FF8C00")
+            day_stats = filtered_df.groupby('DayOfWeek', observed=False)['points'].sum().reset_index()
+            st.bar_chart(day_stats, x='DayOfWeek', y='points', color="#FF8C00")
 
 with tab_streaks:
     st.write("Consecutive days logging at least one beer. Who has the most resilient liver?")
@@ -322,7 +322,7 @@ with tab_milestones:
     st.write("The legends who posted the exact message that crossed every 500-beer milestone.")
     if not filtered_df.empty:
         ms_df = filtered_df.dropna(subset=['data_ora_dt']).sort_values('data_ora_dt').copy()
-        ms_df['running_total'] = ghost_beers + ms_df['punti'].cumsum()
+        ms_df['running_total'] = ghost_beers + ms_df['points'].cumsum()
         
         milestones_hit = []
         min_beers = ghost_beers
@@ -364,7 +364,7 @@ selected_user = st.selectbox("Select a legend:", all_users, label_visibility="co
 if selected_user:
     with st.container(border=True):
         user_df = filtered_df[filtered_df['utente'] == selected_user]
-        user_total = user_df['punti'].sum()
+        user_total = user_df['points'].sum()
         user_uploads = len(user_df)
         user_videos = len(user_df[user_df['tipo_file'] == 'video'])
         avg_beers = user_total / user_uploads if user_uploads > 0 else 0
@@ -395,6 +395,6 @@ if selected_user:
         ucol4.metric("🎬 Downs", user_videos)
         
         with st.expander("🔎 View detailed log (Debugger)"):
-            debug_table = user_df.sort_values(by='data_ora_dt', ascending=False)[['data_ora', 'punti', 'tipo_file', 'nome_file']]
+            debug_table = user_df.sort_values(by='data_ora_dt', ascending=False)[['data_ora', 'points', 'tipo_file', 'nome_file']]
             debug_table.columns = ['Date & Time', 'Points Awarded', 'File Type', 'File Name']
             st.dataframe(debug_table, use_container_width=True, hide_index=True)
