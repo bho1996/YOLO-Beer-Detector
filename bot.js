@@ -7,8 +7,7 @@ const { exec } = require('child_process');
 
 // --- CONFIGURAZIONI ---
 const ID_GRUPPO = "120363420647117056@g.us";
-// 🚨 USA IL TUO ID ESATTO QUI, SENZA "+" E CON "@c.us" ALLA FINE
-const ID_PERSONALE = "393395292936@c.us";
+const ID_PERSONALE = "393395292936@c.us"; 
 const CARTELLA_MEDIA = "./photo_folder";
 const pythonPath = "./env_birre/bin/python";
 
@@ -18,24 +17,14 @@ const regex_numeri_birra = /\b[1-9]\d{4,5}\b/g;
 let isSyncing = false;
 const ritardo = ms => new Promise(res => setTimeout(res, ms));
 
-// --- FUNZIONE DB CON NOTAIO ---
-async function inserisciNelDB(dbConnection, d_ora, utente, file, punti, tipo, numeroDichiarato = null) {
+// --- FUNZIONE DB (Pulita, senza il vecchio Notaio) ---
+async function inserisciNelDB(dbConnection, d_ora, utente, file, punti, tipo) {
     try {
         const row = await dbConnection.get("SELECT valore FROM config WHERE chiave = 'OFFICIAL_TOTAL'");
         const totalePrecedente = parseInt(row.valore || 0);
+        
+        // I punti che arrivano qui sono già quelli definitivi decisi dal Python!
         let incrementoReale = (tipo === "video") ? 1 : punti;
-
-        // ⚖️ LOGICA NOTAIO: Se c'è un numero scritto e l'AI vede birre
-        if (numeroDichiarato && tipo === "foto" && punti > 0) {
-            const saltoRichiesto = numeroDichiarato - totalePrecedente;
-            if (saltoRichiesto > 0 && saltoRichiesto <= 10) {
-                incrementoReale = saltoRichiesto;
-                console.log(`⚖️ Notaio: Sincronizzato con l'utente a ${numeroDichiarato} (Salto di +${incrementoReale})`);
-            } else {
-                console.log(`⚖️ Notaio: Salto a ${numeroDichiarato} ignorato (troppo grande o negativo). Uso il conteggio AI: +${punti}`);
-            }
-        }
-
         const nuovoTotale = totalePrecedente + incrementoReale;
 
         await dbConnection.run(
@@ -82,8 +71,7 @@ client.on('message_create', async msg => {
     try {
         if (!msg || !msg.from) return;
         const chat = await msg.getChat().catch(() => null);
-
-        // 👇 AGGIUNGI QUESTE DUE RIGHE DI DEBUG 👇
+        
         if (chat) {
             console.log(`[DEBUG] Messaggio in arrivo da chat: '${chat.name}' (ID: ${msg.from})`);
         }
@@ -100,18 +88,12 @@ client.on('message_create', async msg => {
         let testo = msg.body || "";
         let data_ora = new Date(msg.timestamp * 1000).toLocaleString('it-IT');
 
-        // ESTRAZIONE NUMERO DICHIARATO DAL TESTO (Cerca numeri di 4-6 cifre)
-        const numeriNelTesto = testo.match(/\d{4,6}/g);
-        const numeroDichiarato = numeriNelTesto ? parseInt(numeriNelTesto[numeriNelTesto.length - 1]) : null;
-
         // 🟢 COMANDO RECUPERO STORICO
         if (testo.startsWith("!recupera_storico ")) {
             let limite = parseInt(testo.replace("!recupera_storico ", "").trim()) || 50;
             console.log(`\n⏳ [RECUPERO] Scansione ultimi ${limite} messaggi DEL GRUPPO...`);
-
+            
             const db = await open({ filename: './1m_beers.db', driver: sqlite3.Database });
-
-            // 🎯 IL TRUCCO: peschiamo la cronologia del gruppo, a prescindere da dove scrivi
             const chatGruppo = await client.getChatById(ID_GRUPPO).catch(() => null);
             if (!chatGruppo) {
                 console.log("❌ Errore: non riesco a trovare il gruppo in memoria!");
@@ -120,13 +102,12 @@ client.on('message_create', async msg => {
             }
 
             let messaggi = await chatGruppo.fetchMessages({ limit: limite }).catch(() => []);
-
             messaggi.reverse();
             let recuperati = 0;
 
             for (let m of messaggi) {
                 if (!m || !m.hasMedia) continue;
-
+                
                 let tipo_file = m.type === "image" ? "foto" : m.type === "video" ? "video" : null;
                 if (!tipo_file) continue;
 
@@ -140,11 +121,9 @@ client.on('message_create', async msg => {
                 let percorso = `${CARTELLA_MEDIA}/${nome_file}`;
                 fs.writeFileSync(percorso, media.data, 'base64');
 
-                const mNumeri = (m.body || "").match(/\d{4,6}/g);
-                const mNumeroDichiarato = mNumeri ? parseInt(mNumeri[mNumeri.length - 1]) : null;
                 let mDataOra = new Date(m.timestamp * 1000).toLocaleString('it-IT');
                 let mContact = await m.getContact().catch(() => null);
-                let mAutore = "Storico"; // Fallback se non lo trova
+                let mAutore = "Storico";
                 if (mContact && mContact.number) {
                     mAutore = `+${mContact.number.substring(0, 2)} *** ${mContact.number.slice(-4)}`;
                 } else if (m.author) {
@@ -155,13 +134,19 @@ client.on('message_create', async msg => {
                 if (tipo_file === "foto") {
                     console.log(`🤖 Invio ${nome_file} all'AI... (Pausa 10s per evitare blocchi)`);
                     await ritardo(10000);
+                    
+                    // PREPARAZIONE DATI PER PYTHON (Storico)
+                    const row = await db.get("SELECT valore FROM config WHERE chiave = 'OFFICIAL_TOTAL'");
+                    const totaleAttuale = parseInt(row.valore || 0);
+                    const mTestoPulito = (m.body || "").replace(/"/g, '\\"').replace(/\n/g, ' ');
 
                     await new Promise(resolve => {
-                        exec(`${pythonPath} ai_judge.py "${percorso}"`, async (err, stdout) => {
+                        // CHIAMATA A PYTHON CON I NUOVI ARGOMENTI
+                        exec(`${pythonPath} ai_judge.py "${percorso}" ${totaleAttuale} "${mTestoPulito}"`, async (err, stdout) => {
                             const match = stdout.match(/BEERS_FOUND:\s*(\d+)/);
                             let birre = match ? parseInt(match[1]) : 0;
                             if (birre > 0) {
-                                await inserisciNelDB(db, mDataOra, mAutore, nome_file, birre, "foto", mNumeroDichiarato);
+                                await inserisciNelDB(db, mDataOra, mAutore, nome_file, birre, "foto");
                                 recuperati++;
                             }
                             if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
@@ -169,7 +154,7 @@ client.on('message_create', async msg => {
                         });
                     });
                 } else if (tipo_file === "video" && (m.body || "").match(regex_numeri_birra)) {
-                    await inserisciNelDB(db, mDataOra, mAutore, nome_file, 1, "video", mNumeroDichiarato);
+                    await inserisciNelDB(db, mDataOra, mAutore, nome_file, 1, "video");
                     if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
                     recuperati++;
                 } else {
@@ -194,18 +179,25 @@ client.on('message_create', async msg => {
                 fs.writeFileSync(percorso, media.data, 'base64');
 
                 if (tipo_file === "foto") {
-                    exec(`${pythonPath} ai_judge.py "${percorso}"`, async (err, stdout) => {
+                    
+                    // PREPARAZIONE DATI PER PYTHON (Diretta)
+                    const row = await db.get("SELECT valore FROM config WHERE chiave = 'OFFICIAL_TOTAL'");
+                    const totaleAttuale = parseInt(row.valore || 0);
+                    const testoPulito = testo.replace(/"/g, '\\"').replace(/\n/g, ' ');
+
+                    // CHIAMATA A PYTHON CON I NUOVI ARGOMENTI
+                    exec(`${pythonPath} ai_judge.py "${percorso}" ${totaleAttuale} "${testoPulito}"`, async (err, stdout) => {
                         const match = stdout.match(/BEERS_FOUND:\s*(\d+)/);
                         let birre = match ? parseInt(match[1]) : 0;
                         if (birre > 0) {
-                            await inserisciNelDB(db, data_ora, autore, nome_file, birre, "foto", numeroDichiarato);
+                            await inserisciNelDB(db, data_ora, autore, nome_file, birre, "foto");
                         }
                         if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
                         await db.close();
                     });
-                    return;
+                    return; 
                 } else if (tipo_file === "video" && testo.match(regex_numeri_birra)) {
-                    await inserisciNelDB(db, data_ora, autore, nome_file, 1, "video", numeroDichiarato);
+                    await inserisciNelDB(db, data_ora, autore, nome_file, 1, "video");
                     if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
                 } else {
                     if (fs.existsSync(percorso)) fs.unlinkSync(percorso);
