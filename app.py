@@ -403,8 +403,8 @@ if selected_user:
 # ==========================================
 st.divider()
 st.subheader("📺 VAR: Global Audit Log")
-with st.expander("Apri il registro completo (Ultime 100 birre)"):
-    st.write("Usa questa tabella per trovare discrepanze tra il gruppo WhatsApp e il Database.")
+with st.expander("Open the full log (Last 100 beers)"):
+    st.write("Use this table to find discrepancies between the WhatsApp group count and the Database.")
     
     audit_df = df.sort_values(by='data_ora_dt', ascending=False).head(100).copy()
     audit_df = audit_df[['data_ora', 'utente', 'punti', 'tipo_file', 'nome_file']]
