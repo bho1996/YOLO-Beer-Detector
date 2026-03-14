@@ -92,7 +92,6 @@ st.title("🍻 The 1 Million Beers Project")
 st.markdown("##### *One million pints. One legendary group. Zero regrets!* 🚀")
 st.write("")
 
-# Creiamo le "scatole" vuote che riempiremo dopo i calcoli matematici
 top_metrics_container = st.container(border=True)
 st.write("")
 progress_container = st.container()
@@ -191,12 +190,11 @@ with mvp_container:
 
     if not df_oggi.empty:
         daily_counts = df_oggi.groupby('utente').size().reset_index(name='Uploads')
-        daily_counts = daily_counts.sort_values(by='Uploads', ascending=False).head(3).reset_index(drop=True)
+        daily_counts = daily_counts.sort_values(by='Uploads', ascending=False).head(5).reset_index(drop=True)
         
-        # 🛠️ AGGIUNTA SPIEGAZIONE DEL CHEER
         st.markdown("#### 🏆 Today's Top Drinkers", help="A 'cheer' is an upload event (a photo or a video). 1 upload = 1 cheer, regardless of how many beers were in the picture!")
         cols = st.columns(len(daily_counts))
-        medals = ["🥇 1st", "🥈 2nd", "🥉 3rd"]
+        medals = ["🥇 1st", "🥈 2nd", "🥉 3rd", "🏅 4th", "🏅 5th"]
         
         for i, row in daily_counts.iterrows():
             with cols[i]:
@@ -282,7 +280,6 @@ with tab_time:
         with c1:
             st.markdown("**When do we drink? (Hour of the Day)**")
             filtered_df['Hour'] = filtered_df['data_ora_dt'].dt.hour
-            # 🛠️ AGGIUNTA RINOMINAZIONE IN "Points"
             hourly_stats = filtered_df.groupby('Hour')['punti'].sum().rename("Points")
             hourly_stats = hourly_stats.reindex(range(24), fill_value=0)
             st.bar_chart(hourly_stats, color="#FFD700")
@@ -294,7 +291,6 @@ with tab_time:
             nomi_giorni = filtered_df['data_ora_dt'].dt.day_name()
             filtered_df['DayOfWeek'] = pd.Categorical(nomi_giorni, categories=days_order, ordered=True)
             
-            # 🛠️ AGGIUNTA RINOMINAZIONE IN "Points"
             day_stats = filtered_df.groupby('DayOfWeek', observed=False)['punti'].sum().reset_index()
             day_stats = day_stats.rename(columns={'punti': 'Points'})
             st.bar_chart(day_stats, x='DayOfWeek', y='Points', color="#FF8C00")
@@ -395,10 +391,23 @@ if selected_user:
         ucol3.metric("🍺 Avg per Upload", f"{avg_beers:.1f}")
         ucol4.metric("🎬 Downs", user_videos)
         
-        # 🛠️ RIPRISTINATO IL DEBUGGER PER I VIDEO
         with st.expander("🔎 View detailed log (Debugger)"):
             debug_table = user_df.sort_values(by='data_ora_dt', ascending=False)[['data_ora', 'punti', 'tipo_file', 'nome_file']].copy()
             debug_table['punti_mostrati'] = debug_table.apply(lambda row: 5 if row['tipo_file'] == 'video' else row['punti'], axis=1)
             debug_table = debug_table[['data_ora', 'punti_mostrati', 'tipo_file', 'nome_file']]
             debug_table.columns = ['Date & Time', 'Personal Points', 'File Type', 'File Name']
             st.dataframe(debug_table, use_container_width=True, hide_index=True)
+
+# ==========================================
+# 11. UI: GLOBAL AUDIT LOG (VAR)
+# ==========================================
+st.divider()
+st.subheader("📺 VAR: Global Audit Log")
+with st.expander("Apri il registro completo (Ultime 100 birre)"):
+    st.write("Usa questa tabella per trovare discrepanze tra il gruppo WhatsApp e il Database.")
+    
+    audit_df = df.sort_values(by='data_ora_dt', ascending=False).head(100).copy()
+    audit_df = audit_df[['data_ora', 'utente', 'punti', 'tipo_file', 'nome_file']]
+    audit_df.columns = ['Date & Time', 'Drinker', 'Points Awarded', 'Type', 'File Name']
+    
+    st.dataframe(audit_df, use_container_width=True, hide_index=True)
