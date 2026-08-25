@@ -1,23 +1,50 @@
+# Foto e video (restano locali sul NAS, non vanno su GitHub)
 photo_folder/
 *.jpg
 *.jpeg
 *.png
 *.mp4
+*.gif
+
+# Modelli ML (troppo grandi per GitHub)
 *.pt
 *.onnx
 *.weights
+best.pt
+yolov8s-world.pt
+
+# Sessioni e cache WhatsApp (SENSIBILE!)
 .wwebjs_auth/
 .wwebjs_cache/
 .wwebjs_auth.bak*/
 .wwebjs_cache.bak*/
+
+# Dipendenze e ambiente
 node_modules/
 venv/
+.env
+.env.local
+
+# Cache Python
 __pycache__/
 *.pyc
-.env
-.devcontainer/
+*.pyo
+*.pyd
+
+# File temporanei di SQLite (NON il DB principale!)
 1m_beers.db-wal
 1m_beers.db-shm
 1m_beers.db-journal
 *.backup*
+
+# Core dump e file temporanei
 core.*
+*.tmp
+*.log
+.DS_Store
+Thumbs.db
+
+# Container e IDE
+.devcontainer/
+.vscode/
+.idea/
