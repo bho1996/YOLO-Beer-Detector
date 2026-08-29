@@ -42,7 +42,7 @@ div[data-testid="metric-container"] {
 with st.sidebar:
     st.header("👨‍💻 Support the Developer")
     st.write("Server costs, AI tokens, and late-night coding sessions don't pay for themselves! If you enjoy the 1M Beers Project, consider offering a real pint.")
-    st.link_button("🍻 Buy me a beer (PayPal)", "https://paypal.me/giovannifrancolini", type="primary", width='stretch')
+    st.link_button("🍻 Buy me a beer (Stripe)", "https://buy.stripe.com/dRm8wHbyFdS90ss1Fe6EU00", type="primary", width='stretch')
     st.divider()
 
 # ==========================================
@@ -341,7 +341,9 @@ if df.empty:
 # --- GESTIONE NICKNAME ---
 NICKNAMES = {
     "+39 *** 2936": "Frank 👑",
-    "+49 *** 8462": "Ernesto Freyberg"
+    "+49 *** 8462": "Ernesto Freyberg",
+    "+49 *** 3870": "Anton Freyberg",
+    "+41 *** 5011": "Constantin Huet"
 }
 REVERSE_NICKNAMES = {v: k for k, v in NICKNAMES.items()}
 df['utente'] = df['utente'].replace(NICKNAMES)
@@ -944,4 +946,4 @@ col_foot1, col_foot2, col_foot3 = st.columns([1, 2, 1])
 with col_foot2:
     st.markdown("<h4 style='text-align: center;'>Enjoying the dashboard? 🍻</h4>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: gray;'>This project runs on caffeine, beer, and cloud servers. If you want to support the development and keep the bot alive, drop a tip!</p>", unsafe_allow_html=True)
-    st.link_button("💸 Buy the Dev a Pint", "https://paypal.me/giovannifrancolini", type="primary", width='stretch')
+    st.link_button("💸 Buy the Dev a Pint", "https://buy.stripe.com/dRm8wHbyFdS90ss1Fe6EU00", type="primary", width='stretch')
