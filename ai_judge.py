@@ -38,9 +38,11 @@ def analizza_singola_foto(percorso_foto):
         print(f"🔴 [ERRORE] La foto {percorso_foto} non esiste!")
         return 0
 
-    prompt = ("Quante birre (bicchieri, bottiglie, pinte o lattine) vedi in primo piano "
-              "o chiaramente intese nella foto? Sii permissivo ma non contare riflessi o oggetti ambigui. "
-              "Rispondi SOLO con la dicitura esatta: BEERS_FOUND: X  /no_think")
+    prompt = ("In questa foto c'è almeno un oggetto che è o potrebbe aver contenuto una birra "
+                "(bicchiere, bottiglia, pinta, lattina, boccale)? "
+                "Anche vuoto o mezzo pieno conta. Non contare riflessi o oggetti ambigui. "
+                "Rispondi SOLO con la dicitura esatta: BEERS_FOUND: 1  (se sì)  oppure  BEERS_FOUND: 0  (se no) "
+                "/no_think")
 
     # --- PIANO A: GROQ (quota generosa, modalità no-thinking) ---
     print("🟡 [DEBUG] Provo Groq (Qwen 3.6 27B, no-think)...")
@@ -98,27 +100,20 @@ def analizza_singola_foto(percorso_foto):
 # ==========================================
 def analizza_intenzione_utente(testo_utente, conteggio_ai, totale_attuale):
     """
-    Principio: ogni birra fisica va SEMPRE contata, il totale avanza sempre.
-    - Counter dell'utente coerente → fidati dell'utente
-    - Counter incoerente (typo) → correggi con le birre fisiche
-    - Counter indietro → ignora il numero, aggiungi le birre fisiche
-    - Nessun counter → usa l'AI (cappata)
+    Logica semplificata per il sistema "a gettoni":
+    - L'utente dichiara un totale globale nel testo → il delta è il salto (se ragionevole)
+    - L'utente NON dichiara nulla → 1 punto se l'AI ha visto una birra, 0 altrimenti
     """
     testo = str(testo_utente)
     numeri = [int(n) for n in re.findall(r'\d+', testo)]
 
-    # Sanità sull'AI: una singola foto non ha realisticamente più di 8 birre
-    if conteggio_ai > 8:
-        print(f"⚖️ [NOTAIO] AI vede {conteggio_ai} birre (irrealistico). Riduco a 1.")
-        conteggio_ai = 1
-
-    birre_fisiche = conteggio_ai if conteggio_ai >= 1 else 1
+    birre_fisiche = 1 if conteggio_ai >= 1 else 0
 
     if totale_attuale <= 0:
         print(f"⚖️ [NOTAIO] Nessun totale di riferimento. Aggiungo {birre_fisiche}.")
         return birre_fisiche
 
-    # Cerca il totale globale dichiarato dall'utente
+    # Cerca un totale globale dichiarato dall'utente
     totale_dichiarato = None
     for num in numeri:
         salto = num - totale_attuale
@@ -126,30 +121,26 @@ def analizza_intenzione_utente(testo_utente, conteggio_ai, totale_attuale):
             if totale_dichiarato is None or num > totale_dichiarato:
                 totale_dichiarato = num
 
+    # CASO A: L'utente NON ha scritto un totale → usa il gettone binario dell'AI
     if totale_dichiarato is None:
-        print(f"⚖️ [NOTAIO] Nessun totale nel testo. Aggiungo {birre_fisiche} birre fisiche.")
+        print(f"⚖️ [NOTAIO] Nessun totale nel testo. AI ha visto birra? {'Sì' if birre_fisiche else 'No'} → {birre_fisiche} punto/i.")
         return birre_fisiche
 
     salto = totale_dichiarato - totale_attuale
 
-    # CASO 1: counter indietro o uguale → NON scartare, aggiungi le birre fisiche
+    # CASO B: Counter indietro o uguale → non ha senso, usa il gettone
     if salto <= 0:
-        print(f"⚖️ [NOTAIO] Utente scrive {totale_dichiarato} (≤ DB {totale_attuale}). Aggiungo {birre_fisiche} fisiche.")
+        print(f"⚖️ [NOTAIO] Utente scrive {totale_dichiarato} (≤ DB {totale_attuale}). Ignoro, uso gettone AI: {birre_fisiche}.")
         return birre_fisiche
 
-    # CASO 2: salto piccolo → fidati dell'utente (anche se l'AI vede di più)
-    if salto <= 15:
-        print(f"⚖️ [NOTAIO] Salto +{salto} dichiarato dall'utente. Accettato (AI vedeva {conteggio_ai}).")
+    # CASO C: Salto ragionevole → fidati dell'utente (sta aggiornando il totale globale)
+    if salto <= 2000:
+        print(f"⚖️ [NOTAIO] Salto +{salto} dichiarato dall'utente. Accettato.")
         return salto
 
-    # CASO 3: salto grande → proporzionale alle birre fisiche, altrimenti è typo
-    soglia_typo = (birre_fisiche * 3) + 5
-    if salto > soglia_typo:
-        print(f"⚖️ [NOTAIO] Salto +{salto} ma AI vede {birre_fisiche} birre (soglia {soglia_typo}). TYPO → aggiungo {birre_fisiche}.")
-        return birre_fisiche
-
-    print(f"⚖️ [NOTAIO] Salto +{salto} coerente con {birre_fisiche} birre. Accetto.")
-    return salto
+    # CASO D: Salto assurdo (>2000) → probabilmente un typo, usa il gettone
+    print(f"⚖️ [NOTAIO] Salto +{salto} irrealistico (probabile typo). Uso gettone AI: {birre_fisiche}.")
+    return birre_fisiche
 
 
 # ==========================================
@@ -168,7 +159,7 @@ if __name__ == "__main__":
     risultato_finale = analizza_intenzione_utente(testo_utente, conteggio_ai, totale_attuale)
 
     # Una foto nel gruppo conta sempre almeno 1
-    if risultato_finale < 1:
-        risultato_finale = 1
+    # if risultato_finale < 1:
+    #     risultato_finale = 1
 
     print(f"BEERS_FOUND: {risultato_finale}")

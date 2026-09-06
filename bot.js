@@ -115,7 +115,7 @@ async function sincronizzaGit(messaggioCommit = "🤖 Auto-update: nuove birre")
     isSyncing = true;
     try {
         await db.run('PRAGMA wal_checkpoint(TRUNCATE)');
-        exec(`git add 1m_beers.db && if ! git diff --cached --quiet; then git commit -m "${messaggioCommit}"; fi && git pull origin main --rebase --autostash && git push`, (error) => {
+        exec(`git add 1m_beers.db && if ! git diff --cached --quiet; then git commit -m "${messaggioCommit}"; fi && git push origin main`, (error) => {
             isSyncing = false;
             if (error) console.log("⚠️ Errore Git:", error.message);
             else console.log("🚀 Dashboard aggiornata!");
@@ -168,38 +168,27 @@ function runAiJudge(percorso_file, totaleAttuale, testoUtente) {
 // ==========================================
 // RIMOZIONE ECCESSO: toglie punti dalle foto con più punti
 // ==========================================
-async function rimuoviEccessoPunti(eccesso) {
+// Versione semplificata: elimina foto con 0 punti dal conteggio
+async function rimuoviEccesso(eccesso) {
     if (eccesso <= 0) return 0;
-
-    // Prende le foto con più punti, ordinate dal più alto al più basso
-    const foto = await db.all(
-        "SELECT rowid, punti, nome_file, utente FROM log_birre WHERE tipo_file = 'foto' AND punti > 0 ORDER BY punti DESC"
+    const risultato = await db.run(
+        "DELETE FROM log_birre WHERE tipo_file = 'foto' AND punti = 0"
     );
-
-    let daRimuovere = eccesso;
-    let rimossoTotale = 0;
-
-    for (const f of foto) {
-        if (daRimuovere <= 0) break;
-
-        // Rimuovi al massimo i punti che ha questa foto (non andare sotto 0)
-        const quanto = Math.min(f.punti, daRimuovere);
-        const nuoviPunti = f.punti - quanto;
-
-        await db.run("UPDATE log_birre SET punti = ? WHERE rowid = ?", [nuoviPunti, f.rowid]);
-        daRimuovere -= quanto;
-        rimossoTotale += quanto;
-
-        console.log(`🔻 ECCESSO: tolto ${quanto} a ${f.nome_file} di ${f.utente} (${f.punti} → ${nuoviPunti})`);
-    }
-
+    console.log(`🗑️ Rimosse ${risultato.changes} foto con 0 punti.`);
+    // Se serve ancora togliere punti, sottrai dalle foto con 1 punto
+    let daRimuovere = eccesso - risultato.changes;
     if (daRimuovere > 0) {
-        console.log(`⚠️ ECCESSO: non sono riuscito a togliere tutto. Rimangono ${daRimuovere} punti da sistemare.`);
-    } else {
-        console.log(`✅ ECCESSO: rimossi ${rimossoTotale} punti totali dalle foto più alte.`);
+        const foto = await db.all(
+            "SELECT rowid FROM log_birre WHERE tipo_file = 'foto' AND punti = 1 ORDER BY rowid DESC LIMIT ?",
+            [daRimuovere]
+        );
+        for (const f of foto) {
+            await db.run("UPDATE log_birre SET punti = 0 WHERE rowid = ?", [f.rowid]);
+        }
+        console.log(`🔻 Azzerate altre ${foto.length} foto.`);
+        return risultato.changes + foto.length;
     }
-
-    return rimossoTotale;
+    return risultato.changes;
 }
 
 async function syncPeriodicoConChat() {
@@ -267,8 +256,6 @@ async function syncPeriodicoConChat() {
         console.log("⚠️ Sync periodico fallito:", e.message);
     }
 }
-setInterval(syncPeriodicoConChat, SYNC_INTERVALLO_MS);
-
 // ==========================================
 // DATABASE
 // ==========================================
@@ -326,55 +313,6 @@ client.on('change_state', (state) => {
     console.log('📶 Stato client:', state);
 });
 
-// ==========================================
-// SYNC PERIODICO CON LA CHAT (ogni 15 min)
-// ==========================================
-async function syncPeriodicoConChat() {
-    try {
-        const tutteLeChat = await client.getChats();
-        const gruppo = tutteLeChat.find(c => c.name === NOME_GRUPPO_BERSAGLIO);
-        if (!gruppo) return;
-
-        const messaggi = await gruppo.fetchMessages({ limit: 50 });
-        const totali = [];
-        for (const m of messaggi) {
-            const match = (m.body || "").match(/\b\d{5,6}\b/g);
-            if (match) for (const n of match) {
-                const v = parseInt(n);
-                if (v > 10000) totali.push(v);
-            }
-        }
-        if (totali.length === 0) return;
-
-        const totaleDb = await db.get("SELECT valore FROM config WHERE chiave='OFFICIAL_TOTAL'")
-            .then(row => row ? parseInt(row.valore) : 0);
-
-        // FILTRO OUTLIER: solo valori avanti ma entro +500
-        const plausibili = totali.filter(v => v > totaleDb && v <= totaleDb + 500);
-        if (plausibili.length === 0) return;
-
-        plausibili.sort((a, b) => b - a);
-        const massimo = plausibili[0];
-        const secondo = plausibili.length > 1 ? plausibili[1] : null;
-
-        const gap = massimo - totaleDb;
-        if (gap > 100) {
-            console.log(`🔎 Sync: massimo ${massimo} (+${gap}) troppo alto. NON allineo.`);
-            return;
-        }
-        if (secondo !== null && (massimo - secondo) > 10) {
-            console.log(`🔎 Sync: ${massimo} vs ${secondo}: non consensuale. NON allineo.`);
-            return;
-        }
-
-        console.log(`🔎 Sync periodico: allineo ${totaleDb} → ${massimo} (+${gap}).`);
-        await db.run("INSERT OR REPLACE INTO config (chiave, valore) VALUES ('OFFICIAL_TOTAL', ?)", massimo);
-    } catch (e) {
-        console.log("⚠️ Sync periodico fallito:", e.message);
-    }
-}
-
-// Ogni 15 minuti
 // ==========================================
 // SYNC GIORNALIERO alle 7:00 del mattino
 // ==========================================
@@ -566,26 +504,23 @@ if (chat.name !== NOME_GRUPPO_BERSAGLIO) {
                     await inserisciNelDB(data_ora, autore, nome_file, 5, "video");
                 } else if (tipo_file === "foto") {
                     console.log(`📥 Foto in coda AI: ${nome_file}`);
-
-                     codaAI.push(async () => {
-			// ANTI-RICONTAGGIO: se questa foto è già nel DB, salta
-const giaCensita = await db.get("SELECT rowid FROM log_birre WHERE nome_file = ?", [nome_file]);
-if (giaCensita) {
-    console.log(`♻️ ${nome_file} già censita: salto (anti-riconteggio).`);
-    return;
-}
-                        console.log(`🤖 Analisi AI: ${nome_file}`);
+                    codaAI.push(async () => {
+                        console.log(`🤖 Analisi AI (binaria): ${nome_file}`);
                         const totaleAttuale = await leggiTotale();
-                        // Il Notaio (ai_judge.py) ha già deciso tutto lui:
-                        // ha letto la foto, il testo e il totale, e ha cross-validato
-                        const deltaNotaio = await runAiJudge(percorso_file, totaleAttuale, testo);
-                        const delta = Math.max(1, deltaNotaio); // una foto conta SEMPRE almeno 1
-                        await avanzaTotale(delta, `Foto ${nome_file}`);
-                        console.log(`✅ FOTO: Notaio=${deltaNotaio}, Assegnati=${delta}`);
+                        const conteggio = await chiamaAI(percorso_file, totaleAttuale, testo);
+                        // L'AI ora risponde 0 (niente birra) o >=1 (birra presente)
+                        const delta = conteggio >= 1 ? 1 : 0;
+                        
+                        if (delta > 0) {
+                            await avanzaTotale(delta, `Foto ${nome_file}`);
+                            console.log(`✅ FOTO: AI ha visto birra → +${delta} punto`);
+                        } else {
+                            console.log(`⛔ FOTO: AI non ha visto birra → 0 punti (foto scartata)`);
+                        }
                         await inserisciNelDB(data_ora, autore, nome_file, delta, "foto");
                     });
-
                     smaltisciCoda();
+
                 }
             }
         }

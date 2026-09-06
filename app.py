@@ -343,7 +343,8 @@ NICKNAMES = {
     "+39 *** 2936": "Frank 👑",
     "+49 *** 8462": "Ernesto Freyberg",
     "+49 *** 3870": "Anton Freyberg",
-    "+41 *** 5011": "Constantin Huet"
+    "+41 *** 5011": "Constantin Huet",
+    "+33 *** 2961": "Adhemar"
 }
 REVERSE_NICKNAMES = {v: k for k, v in NICKNAMES.items()}
 df['utente'] = df['utente'].replace(NICKNAMES)
@@ -384,15 +385,9 @@ df['data_ora_dt'] = df['data_ora'].apply(parse_flexible)
 # ==========================================
 def clean_points(row):
     if row['tipo_file'] == 'video':
-        return 1
+        return 5  # FIX: era 1, ma il bot salva 5
     else:
-        p = row['punti']
-        if p < 0:
-            return 1
-        elif p > 100:
-            return 10
-        else:
-            return p
+        return row['punti']  # Per le foto: usa il valore reale dal DB (0 o 1)
 
 df['punti_clean'] = df.apply(clean_points, axis=1)
 
@@ -693,15 +688,29 @@ with col_right:
                 Unique_Drinkers=('utente', 'nunique')
             ).reset_index()
             nation_stats['Per_Capita'] = (nation_stats['Total_Pints'] / nation_stats['Unique_Drinkers']).round(1)
-            view_mode = st.radio("Select Leaderboard:", ["🏆 Absolute Total", "⚖️ Per Capita (Pints per person)"], horizontal=True, label_visibility="collapsed")
+
+            # --- NUOVO: Limita alle top N nazioni per il grafico ---
+            TOP_NATIONS = 15
+            nation_stats_sorted = nation_stats.sort_values('Total_Pints', ascending=False)
+            nation_stats_top = nation_stats_sorted.head(TOP_NATIONS)
+            # --- FINE NUOVO ---
+
+            view_mode = st.radio("Select Leaderboard:", 
+                ["🏆 Absolute Total", "⚖️ Per Capita (Pints per person)"], 
+                horizontal=True, label_visibility="collapsed")
+
             if view_mode == "🏆 Absolute Total":
-                chart_data = nation_stats.sort_values('Total_Pints', ascending=False).set_index('Country')[['Total_Pints']]
+                # USA nation_stats_top INVECE DI nation_stats
+                chart_data = nation_stats_top.set_index('Country')[['Total_Pints']]
                 st.bar_chart(chart_data, color="#4682B4")
             else:
-                chart_data = nation_stats.sort_values('Per_Capita', ascending=False).set_index('Country')[['Per_Capita']]
+                # USA nation_stats_top INVECE DI nation_stats
+                chart_data = nation_stats_top.sort_values('Per_Capita', ascending=False).set_index('Country')[['Per_Capita']]
                 st.bar_chart(chart_data, color="#FF8C00")
-            with st.expander("📊 View exact numbers"):
-                st.dataframe(nation_stats.sort_values('Total_Pints', ascending=False), width='stretch', hide_index=True)
+
+            with st.expander(f"📊 View all {len(nation_stats)} nations (full table)"):
+                # Tabella completa resta disponibile per chi vuole
+                st.dataframe(nation_stats_sorted, use_container_width=True, hide_index=True)
         else:
             st.info("No data available.")
 
