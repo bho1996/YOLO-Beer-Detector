@@ -507,7 +507,7 @@ if (chat.name !== NOME_GRUPPO_BERSAGLIO) {
                     codaAI.push(async () => {
                         console.log(`🤖 Analisi AI (binaria): ${nome_file}`);
                         const totaleAttuale = await leggiTotale();
-                        const conteggio = await chiamaAI(percorso_file, totaleAttuale, testo);
+                        const conteggio = await runAiJudge(percorso_file, totaleAttuale, testo);
                         // L'AI ora risponde 0 (niente birra) o >=1 (birra presente)
                         const delta = conteggio >= 1 ? 1 : 0;
                         
