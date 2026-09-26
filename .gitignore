@@ -5,6 +5,9 @@ photo_folder/
 *.png
 *.mp4
 *.gif
+# ...eccetto la "Picture of the Day" (1 foto/giorno, ridimensionata e senza EXIF)
+!potd/
+!potd/*.jpg
 
 # Modelli ML (troppo grandi per GitHub)
 *.pt

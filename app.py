@@ -1,4 +1,5 @@
 import os
+import json
 import math
 import sqlite3
 
@@ -187,30 +188,71 @@ with m2:
 # ==========================================
 st.divider()
 p1, p2 = st.columns([3, 2])
-potd_day = ref_day
-potd, n_candidates = S.picture_of_the_day(fdf, potd_day, lambda f: photo_source(f) is not None,
-                                          st.session_state.get("potd_offset", 0))
-if potd is None:
-    potd_day = ref_day - pd.Timedelta(days=1)
-    potd, n_candidates = S.picture_of_the_day(fdf, potd_day, lambda f: photo_source(f) is not None,
-                                              st.session_state.get("potd_offset", 0))
+
+
+def display_name(utente):
+    """Stessa normalizzazione della pipeline dati (alias prefissi + nickname)."""
+    u = str(utente).strip()
+    u = REPORT.get('aliases', {}).get(u, u)
+    return NICKNAMES.get(u, u)
+
+
+def published_potd():
+    """Foto pubblicate dal bot (publish_potd.py) in potd/, dalla più recente."""
+    try:
+        with open(POTD_INDEX) as f:
+            index = json.load(f)
+    except (OSError, ValueError):
+        return []
+    out = []
+    for day, meta in sorted(index.items(), reverse=True):
+        img = os.path.join(POTD_DIR, meta.get('image') or '')
+        if meta.get('image') and os.path.exists(img) and pd.Timestamp(day) <= ref_day:
+            out.append((pd.Timestamp(day), img, meta))
+    return out
+
+
+def potd_label(day):
+    return {0: "today", 1: "yesterday"}.get((ref_day - day).days, day.strftime('%d %b %Y'))
+
+
 with p1:
-    label = "today" if potd_day == ref_day else "yesterday"
-    st.subheader(f"📸 Picture of the Day ({label})")
-    if potd is None:
-        st.info("No pictures yet today... the stage is yours! 🍺")
-    else:
-        src = photo_source(potd['nome_file'])
-        who, when, n = potd['utente'], potd['data_ora_dt'].strftime('%H:%M'), int(potd['beers'])
-        if src:
-            st.image(src, caption=f"📷 {who} · {when} · {n} 🍺", width="stretch")
-        else:
-            st.markdown(f"""<div class="potd-card"><div class="potd-emoji">{'🍺' * min(n, 5)}</div>
-                <h3>{who}</h3><p>raised <b>{n} beer{'s' if n > 1 else ''}</b> at <b>{when}</b></p></div>""",
-                        unsafe_allow_html=True)
-        if n_candidates > 1 and st.button(f"🎲 Show another one ({n_candidates} photos {label})"):
+    published = published_potd()
+    # 1) Live: se le foto originali sono accessibili (dashboard sul NAS o PHOTO_BASE_URL)
+    live, n_live, live_day = None, 0, ref_day
+    for d in (ref_day, ref_day - pd.Timedelta(days=1)):
+        live, n_live = S.picture_of_the_day(fdf, d, lambda f: photo_source(f) is not None,
+                                            st.session_state.get("potd_offset", 0))
+        if live is not None and photo_source(live['nome_file']):
+            live_day = d
+            break
+        live = None
+
+    if live is not None:
+        st.subheader(f"📸 Picture of the Day ({potd_label(live_day)})")
+        st.image(photo_source(live['nome_file']), width="stretch",
+                 caption=f"📷 {live['utente']} · {live['data_ora_dt'].strftime('%H:%M')}")
+        if n_live > 1 and st.button(f"🎲 Show another one ({n_live} photos)"):
             st.session_state["potd_offset"] = st.session_state.get("potd_offset", 0) + 1
             st.rerun()
+    # 2) Pubblicata dal bot su GitHub (caso Streamlit Cloud)
+    elif published:
+        day, img, meta = published[0]
+        st.subheader(f"📸 Picture of the Day ({potd_label(day)})")
+        st.image(img, width="stretch",
+                 caption=f"📷 {display_name(meta.get('utente'))} · {meta.get('time', '')} · "
+                         f"picked among {meta.get('candidates', '?')} photos")
+        if len(published) > 1:
+            with st.expander("🖼️ Previous pictures of the day"):
+                cols = st.columns(3)
+                for i, (d, im, m) in enumerate(published[1:7]):
+                    cols[i % 3].image(im, caption=f"{d.strftime('%d %b')} · {display_name(m.get('utente'))}",
+                                      width="stretch")
+    # 3) Nessuna immagine disponibile
+    else:
+        st.subheader("📸 Picture of the Day")
+        st.markdown("""<div class="potd-card"><div class="potd-emoji">📷🍺</div>
+            <p>The picture of the day will appear here soon!</p></div>""", unsafe_allow_html=True)
 with p2:
     st.subheader("🔥 Today's Top Drinkers")
     today_lb = S.build_leaderboard(today_df, top_n=5)

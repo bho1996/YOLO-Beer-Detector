@@ -8,7 +8,9 @@ MILESTONE_STEP = 500
 GROUP_START_STR = "2025-06-11"
 TZ = "Europe/Rome"
 DB_PATH = "1m_beers.db"
-PHOTO_DIR = "photo_folder"
+PHOTO_DIR = "photo_folder"          # foto originali (solo sul NAS)
+POTD_DIR = "potd"                   # foto del giorno pubblicate dal bot (su GitHub)
+POTD_INDEX = os.path.join(POTD_DIR, "index.json")
 ORANGE = "#FFA500"
 
 NICKNAMES = {
