@@ -243,8 +243,9 @@ async function syncPeriodicoConChat() {
                 console.log(`🔎 Sync ↓: gap troppo grande (${eccesso}), probabilmente outlier. Salto.`);
                 return;
             }
-            console.log(`🔎 Sync ↓: DB ha ${eccesso} punti in più. Li tolgo dalle foto più alte.`);
-            const rimosso = await rimuoviEccessoPunti(eccesso);
+            // NB: le righe delle foto NON vengono mai modificate/cancellate.
+            // Si aggiorna solo il contatore ufficiale; la dashboard gestisce la differenza.
+            console.log(`🔎 Sync ↓: DB ha ${eccesso} punti in più del gruppo. Aggiorno solo il totale ufficiale.`);
             // Abbassa il totale al valore reale del gruppo
             await db.run("INSERT OR REPLACE INTO config (chiave, valore) VALUES ('OFFICIAL_TOTAL', ?)", massimo);
             await sincronizzaGit(`🤖 Auto-sync: corretto eccesso, totale a ${massimo}`);
