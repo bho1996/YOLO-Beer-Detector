@@ -1,0 +1,67 @@
+name: Deploy website
+
+# Ogni push del bot (DB aggiornato) rigenera data.json e ripubblica il sito.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "1m_beers.db"
+      - "potd/**"
+      - "web/**"
+      - "export_data.py"
+      - "data_quality.py"
+      - "countries.py"
+      - "nicknames.json"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Se arrivano più push ravvicinati, pubblica solo l'ultimo
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pandas
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build
+        working-directory: web
+        env:
+          VITE_STRIPE_LINK: ${{ vars.STRIPE_LINK }}
+          VITE_PAYPAL_LINK: ${{ vars.PAYPAL_LINK }}
+          VITE_BUYMEACOFFEE_LINK: ${{ vars.BUYMEACOFFEE_LINK }}
+          VITE_MONTHLY_COSTS_EUR: ${{ vars.MONTHLY_COSTS_EUR }}
+          VITE_DONATED_THIS_MONTH_EUR: ${{ vars.DONATED_THIS_MONTH_EUR }}
+          VITE_SUPPORTERS: ${{ vars.SUPPORTERS }}
+          VITE_PINT_PRICE_EUR: ${{ vars.PINT_PRICE_EUR }}
+        run: |
+          npm ci
+          npm run build
+          python ../export_data.py dist
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+      - id: deployment
+        uses: actions/deploy-pages@v4

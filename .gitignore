@@ -28,6 +28,11 @@ venv/
 .env
 .env.local
 
+# Sito web: build e dati generati (li crea la GitHub Action)
+web/dist/
+web/public/data.json
+web/public/potd/
+
 # Cache Python
 __pycache__/
 *.pyc

@@ -1,0 +1,23 @@
+{
+  "name": "one-million-beers",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "data": "test -x ../venv/bin/python && ../venv/bin/python ../export_data.py public || python3 ../export_data.py public",
+    "dev": "vite",
+    "build": "vue-tsc --noEmit --project . && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "echarts": "^5.5.1",
+    "vue": "^3.5.12",
+    "vue-echarts": "^7.0.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.1.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vue-tsc": "^2.1.10"
+  }
+}

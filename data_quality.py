@@ -11,8 +11,14 @@ import pandas as pd
 from countries import build_identity_aliases
 
 TZ = "Europe/Rome"
-BEERS_PER_VIDEO = 1      # una "sgolata" conta 1 birra nel totale globale
-SCORE_PER_VIDEO = 5      # ...ma vale 5 punti in classifica
+# REGOLA DI CONTEGGIO
+# - Totale globale: ogni foto approvata (punti > 0) = 1 birra, ogni video = 1 birra.
+# - Classifica individuale: foto approvata = 1 punto, video = 5 punti.
+# Il valore 'punti' salvato nel DB (a volte > 1 per vecchi VAR) NON viene usato come moltiplicatore.
+BEERS_PER_PHOTO = 1
+BEERS_PER_VIDEO = 1
+SCORE_PER_PHOTO = 1
+SCORE_PER_VIDEO = 5
 
 _WA_TS_RE = re.compile(r"^WA_(\d{9,11})\.")
 _FILE_DATE_RE = re.compile(r"^(?:IMG|VID)-(\d{8})-WA")
@@ -121,10 +127,17 @@ def prepare(df_raw, nicknames=None):
     # Punti: 'beers' = contributo al totale globale, 'score' = punti classifica
     df["punti"] = pd.to_numeric(df["punti"], errors="coerce").fillna(0).astype(int)
     is_video = df["tipo_file"] == "video"
-    df["beers"] = df["punti"].where(~is_video, BEERS_PER_VIDEO)
-    df["score"] = df["punti"].where(~is_video, SCORE_PER_VIDEO)
+    approved = df["punti"] > 0
+    df["beers"] = 0
+    df.loc[~is_video & approved, "beers"] = BEERS_PER_PHOTO
+    df.loc[is_video, "beers"] = BEERS_PER_VIDEO
+    df["score"] = 0
+    df.loc[~is_video & approved, "score"] = SCORE_PER_PHOTO
+    df.loc[is_video, "score"] = SCORE_PER_VIDEO
     report.update(
         videos_with_1pt=int((is_video & (df["punti"] != SCORE_PER_VIDEO)).sum()),
+        photos_multi_pt=int((~is_video & (df["punti"] > 1)).sum()),
+        photos_multi_pt_extra=int((df["punti"] - 1).where(~is_video & (df["punti"] > 1), 0).sum()),
         negative_rows=int((df["punti"] < 0).sum()),
         zero_photos=int(((~is_video) & (df["punti"] == 0)).sum()),
         big_jumps=int(((~is_video) & (df["punti"] >= 20)).sum()),
