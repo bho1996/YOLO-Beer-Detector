@@ -115,9 +115,19 @@ async function sincronizzaGit(messaggioCommit = "🤖 Auto-update: nuove birre")
     isSyncing = true;
     try {
         await db.run('PRAGMA wal_checkpoint(TRUNCATE)');
-        exec(`git add 1m_beers.db && (git add -A potd 2>/dev/null || true) && if ! git diff --cached --quiet; then git commit -m "${messaggioCommit}"; fi && git push origin main`, (error) => {
+        // 1) commit locale  2) pull dei commit fatti da altri PC (es. modifiche al codice dal Mac)
+        //    -X ours: in caso di conflitto sul DB vince SEMPRE la copia del NAS (quella viva)
+        // 3) push. Senza il pull, un solo commit esterno blocca tutti i push successivi.
+        const cmd = [
+            `git add 1m_beers.db`,
+            `(git add -A potd 2>/dev/null || true)`,
+            `(git diff --cached --quiet || git commit -q -m "${messaggioCommit}")`,
+            `(git pull -q --no-rebase --no-edit -X ours origin main || (git merge --abort 2>/dev/null; false))`,
+            `git push -q origin main`,
+        ].join(' && ');
+        exec(cmd, (error, stdout, stderr) => {
             isSyncing = false;
-            if (error) console.log("⚠️ Errore Git:", error.message);
+            if (error) console.log("⚠️ Errore Git:", (stderr || error.message).trim());
             else console.log("🚀 Dashboard aggiornata!");
         });
     } catch (e) {
