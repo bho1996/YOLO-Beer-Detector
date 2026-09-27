@@ -115,9 +115,19 @@ async function sincronizzaGit(messaggioCommit = "🤖 Auto-update: nuove birre")
     isSyncing = true;
     try {
         await db.run('PRAGMA wal_checkpoint(TRUNCATE)');
-        exec(`git add 1m_beers.db && if ! git diff --cached --quiet; then git commit -m "${messaggioCommit}"; fi && git push origin main`, (error) => {
+        // 1) commit locale  2) pull dei commit fatti da altri PC (es. modifiche al codice dal Mac)
+        //    -X ours: in caso di conflitto sul DB vince SEMPRE la copia del NAS (quella viva)
+        // 3) push. Senza il pull, un solo commit esterno blocca tutti i push successivi.
+        const cmd = [
+            `git add 1m_beers.db`,
+            `(git add -A potd 2>/dev/null || true)`,
+            `(git diff --cached --quiet || git commit -q -m "${messaggioCommit}")`,
+            `(git pull -q --no-rebase --no-edit -X ours origin main || (git merge --abort 2>/dev/null; false))`,
+            `git push -q origin main`,
+        ].join(' && ');
+        exec(cmd, (error, stdout, stderr) => {
             isSyncing = false;
-            if (error) console.log("⚠️ Errore Git:", error.message);
+            if (error) console.log("⚠️ Errore Git:", (stderr || error.message).trim());
             else console.log("🚀 Dashboard aggiornata!");
         });
     } catch (e) {
@@ -243,8 +253,9 @@ async function syncPeriodicoConChat() {
                 console.log(`🔎 Sync ↓: gap troppo grande (${eccesso}), probabilmente outlier. Salto.`);
                 return;
             }
-            console.log(`🔎 Sync ↓: DB ha ${eccesso} punti in più. Li tolgo dalle foto più alte.`);
-            const rimosso = await rimuoviEccessoPunti(eccesso);
+            // NB: le righe delle foto NON vengono mai modificate/cancellate.
+            // Si aggiorna solo il contatore ufficiale; la dashboard gestisce la differenza.
+            console.log(`🔎 Sync ↓: DB ha ${eccesso} punti in più del gruppo. Aggiorno solo il totale ufficiale.`);
             // Abbassa il totale al valore reale del gruppo
             await db.run("INSERT OR REPLACE INTO config (chiave, valore) VALUES ('OFFICIAL_TOTAL', ?)", massimo);
             await sincronizzaGit(`🤖 Auto-sync: corretto eccesso, totale a ${massimo}`);
@@ -314,6 +325,23 @@ client.on('change_state', (state) => {
 });
 
 // ==========================================
+// PICTURE OF THE DAY: pubblica 1 foto (di ieri) per la dashboard
+// ==========================================
+const POTD_SCRIPT = "/srv/mergerfs/PoolArchivio/YOLO-Beer-Detector/publish_potd.py";
+function pubblicaFotoDelGiorno() {
+    return new Promise((resolve) => {
+        execFile(PYTHON_PATH, [POTD_SCRIPT], { timeout: 60000 }, async (error, stdout) => {
+            if (error) console.log("⚠️ POTD fallita:", error.message);
+            else {
+                console.log(`📸 ${stdout.trim()}`);
+                await sincronizzaGit("📸 Picture of the Day");
+            }
+            resolve();
+        });
+    });
+}
+
+// ==========================================
 // SYNC GIORNALIERO alle 7:00 del mattino
 // ==========================================
 setInterval(async () => {
@@ -325,6 +353,7 @@ setInterval(async () => {
     if (ore >= 7 && ultimoSyncDate !== oggi) {
         console.log(`⏰ Sync giornaliero delle 7:00 - avviato il ${oggi}`);
         await syncPeriodicoConChat();
+        await pubblicaFotoDelGiorno();
         ultimoSyncDate = oggi;
     }
 }, 10 * 60 * 1000);  // controlla ogni 10 minuti se è ora di fare il sync
