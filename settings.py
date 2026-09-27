@@ -13,13 +13,10 @@ POTD_DIR = "potd"                   # foto del giorno pubblicate dal bot (su Git
 POTD_INDEX = os.path.join(POTD_DIR, "index.json")
 ORANGE = "#FFA500"
 
-NICKNAMES = {
-    "+39 *** 2936": "Frank 👑",
-    "+49 *** 8462": "Ernesto Freyberg",
-    "+49 *** 3870": "Anton Freyberg",
-    "+41 *** 5011": "Constantin Huet",
-    "+33 *** 2961": "Adhemar",
-}
+import json as _json
+
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "nicknames.json"), encoding="utf-8") as _f:
+    NICKNAMES = _json.load(_f)   # condiviso con export_data.py / nuovo frontend
 
 
 def cfg(key, default=None):

@@ -12,7 +12,11 @@ const PYTHON_PATH = "/srv/mergerfs/PoolArchivio/YOLO-Beer-Detector/venv/bin/pyth
 const SCRIPT_PATH = "/srv/mergerfs/PoolArchivio/YOLO-Beer-Detector/ai_judge.py";
 const DB_PATH = "/srv/mergerfs/PoolArchivio/YOLO-Beer-Detector/1m_beers.db";
 const AI_TIMEOUT_MS = 120000;
-const SALTO_MAX_SICUREZZA = 5000;   // anti-typo catastrofico (uno zero in più)
+const SALTO_MAX_SICUREZZA = 150;    // un SINGOLO messaggio non può alzare il totale di più di così
+                                    // (salti più grandi solo con consenso di più messaggi, vedi sync)
+const SYNC_FINESTRA = 3000;         // il sync considera valori entro ±3000 dal totale del DB
+const SYNC_CONSENSO_MIN = 3;        // messaggi concordi necessari per correzioni > 100
+const SYNC_CONSENSO_TOLL = 30;      // "concordi" = entro 30 birre l'uno dall'altro
 const SYNC_INTERVALLO_MS = 15 * 60 * 1000;  // sync periodico ogni 15 min
 
 if (!fs.existsSync(CARTELLA_MEDIA)) {
@@ -207,13 +211,13 @@ async function syncPeriodicoConChat() {
         const gruppo = tutteLeChat.find(c => c.name === NOME_GRUPPO_BERSAGLIO);
         if (!gruppo) return;
 
-        // Raccogli tutti i totali scritti negli ultimi 50 messaggi
+        // Raccogli i totali scritti negli ultimi 50 messaggi (1 valore per messaggio: l'ultimo numero)
         const messaggi = await gruppo.fetchMessages({ limit: 50 });
         const totali = [];
         for (const m of messaggi) {
             const match = (m.body || "").match(/\b\d{5,6}\b/g);
-            if (match) for (const n of match) {
-                const v = parseInt(n);
+            if (match) {
+                const v = parseInt(match[match.length - 1]);
                 if (v > 10000) totali.push(v);
             }
         }
@@ -223,20 +227,41 @@ async function syncPeriodicoConChat() {
         const rowTotale = await db.get("SELECT valore FROM config WHERE chiave='OFFICIAL_TOTAL'");
         const dbTotal = rowTotale ? parseInt(rowTotale.valore) : 0;
 
-        const plausibili = totali.filter(v => Math.abs(v - dbTotal) <= 500);
+        const plausibili = totali.filter(v => Math.abs(v - dbTotal) <= SYNC_FINESTRA);
         if (plausibili.length === 0) return;
-
         plausibili.sort((a, b) => b - a);
-        const massimo = plausibili[0];
-        const secondo = plausibili.length > 1 ? plausibili[1] : null;
 
-        // Richiede consenso: se c'è un secondo valore, deve essere vicino al massimo
-        if (secondo !== null && (massimo - secondo) > 10) {
-            console.log(`🔎 Sync: ${massimo} vs ${secondo} non consensuale. Salto.`);
-            return;
+        // Consenso: per ogni valore conta quanti messaggi stanno nei 30 sotto di lui.
+        // Si sceglie il valore PIÙ ALTO sostenuto da almeno SYNC_CONSENSO_MIN messaggi
+        // (il gruppo conta in avanti, quindi i messaggi più recenti hanno i numeri più alti).
+        const supporto = v => plausibili.filter(x => x <= v && v - x <= SYNC_CONSENSO_TOLL).length;
+        let massimo = plausibili.find(v => supporto(v) >= SYNC_CONSENSO_MIN) ?? null;
+        let consensoForte = massimo !== null;
+
+        if (massimo === null) {
+            // Fallback (regola storica): massimo + secondo valore entro 10
+            massimo = plausibili[0];
+            const secondo = plausibili.length > 1 ? plausibili[1] : null;
+            if (secondo !== null && (massimo - secondo) > 10) {
+                console.log(`🔎 Sync: ${massimo} vs ${secondo} non consensuale. Salto.`);
+                return;
+            }
         }
 
         const gap = massimo - dbTotal;
+
+        // CASO 0: scostamento grande (es. un messaggio sbagliato accettato in passato).
+        // Si corregge SOLO con consenso forte di più messaggi, in entrambe le direzioni.
+        if (Math.abs(gap) > 100) {
+            if (!consensoForte) {
+                console.log(`🔎 Sync: scostamento ${gap} senza consenso sufficiente. Salto.`);
+                return;
+            }
+            console.log(`🔎 Sync ⚖️: ${supporto(massimo)} messaggi concordano su ~${massimo}. Correggo ${dbTotal} → ${massimo} (${gap > 0 ? '+' : ''}${gap}).`);
+            await db.run("INSERT OR REPLACE INTO config (chiave, valore) VALUES ('OFFICIAL_TOTAL', ?)", massimo);
+            await sincronizzaGit(`🤖 Auto-sync (consenso): totale a ${massimo}`);
+            return;
+        }
 
         // CASO A: il gruppo è AVANTI → allinea verso l'alto
         if (gap > 0 && gap <= 100) {
@@ -500,14 +525,9 @@ if (chat.name !== NOME_GRUPPO_BERSAGLIO) {
             const risultato = await allineaTotale(nuovoValore, "Testo");
 
             if (risultato.aggiornato) {
-                // VAR retroattivo: corregge l'ultima foto dell'autore
-                const fotoRecente = await db.get(
-                    `SELECT rowid, punti FROM log_birre WHERE utente = ? AND tipo_file = 'foto' ORDER BY rowid DESC LIMIT 1`, [autore]
-                );
-                if (fotoRecente) {
-                    await db.run("UPDATE log_birre SET punti = ? WHERE rowid = ?", [risultato.delta, fotoRecente.rowid]);
-                    console.log(`🔄 VAR: ${autore} corretto da ${fotoRecente.punti} a ${risultato.delta}`);
-                }
+                // NB: il vecchio "VAR retroattivo" (scriveva il salto come punti dell'ultima foto
+                // dell'autore) è disattivato: ogni foto conta sempre 1, il salto resta solo nel
+                // totale ufficiale.
                 await sincronizzaGit(`🤖 Auto-update: totale a ${nuovoValore}`);
             }
         }
