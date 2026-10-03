@@ -75,6 +75,69 @@ def streaks(df, ref_day):
     return best, active
 
 
+def death_row(df, members, snapshot, ref_day, months=3):
+    """Chi va rimosso dal gruppo: inattivo da `months` mesi (o mai attivo).
+
+    df       : upload già filtrati (fdf), con 'utente', 'data_ora_dt', 'id'.
+    members  : DataFrame membri_gruppo (utente, prima_vista, ultima_vista, admin) oppure None.
+    snapshot : data (str YYYY-MM-DD) dell'ultima istantanea membri, oppure None.
+    Ritorna (candidati, usciti, membership_nota):
+      - candidati: ancora nel gruppo (o stato ignoto) e inattivi → da rimuovere
+      - usciti: hanno postato in passato ma non risultano più nel gruppo (già via)
+      - membership_nota: False se non c'è nessuna istantanea (lista solo dai post)
+    """
+    cutoff = ref_day - pd.DateOffset(months=months)
+    d = df.dropna(subset=['data_ora_dt'])
+    activity = d.groupby('utente').agg(last=('data_ora_dt', 'max'), uploads=('id', 'size'))
+
+    known = members is not None and snapshot is not None and not members.empty
+    if known:
+        m = members.copy()
+        m['utente'] = m['utente'].astype(str).str.strip()
+        m = m.drop_duplicates('utente').set_index('utente')
+        m['prima_vista'] = pd.to_datetime(m['prima_vista'], errors='coerce')
+        m['in_group'] = m['ultima_vista'].astype(str) == str(snapshot)
+        table = activity.join(m[['prima_vista', 'in_group', 'admin']], how='outer')
+    else:
+        table = activity.copy()
+        table['prima_vista'] = pd.NaT
+        table['in_group'] = pd.NA
+        table['admin'] = 0
+
+    table['uploads'] = table['uploads'].fillna(0).astype(int)
+    table['admin'] = table['admin'].fillna(0).astype(int)
+    # Con zero righe (o join senza date) le colonne restano 'object': forzo datetime.
+    table['last'] = pd.to_datetime(table['last'], errors='coerce')
+    table['prima_vista'] = pd.to_datetime(table['prima_vista'], errors='coerce')
+
+    never = table['last'].isna()
+    inactive = (~never & (table['last'] < cutoff))
+    # Chi non ha mai postato è candidato solo se è nel gruppo da prima del cutoff
+    # (periodo di grazia per i nuovi membri). Se non sappiamo da quando c'è, non lo giudichiamo.
+    silent = never & table['prima_vista'].notna() & (table['prima_vista'] < cutoff)
+
+    # in_group: True → nel gruppo, False → uscito, NA/None → non nell'istantanea (o nessuna istantanea)
+    table['Status'] = 'Unknown'
+    in_group = table['in_group']
+    table.loc[in_group.notna() & (in_group.astype('boolean') == True), 'Status'] = 'In group'   # noqa: E712
+    table.loc[in_group.notna() & (in_group.astype('boolean') == False), 'Status'] = 'Left'      # noqa: E712
+    table['Months silent'] = ((ref_day - table['last']).dt.days / 30.4).round(1)
+
+    candidates = table[(inactive | silent) & (table['Status'] != 'Left')].copy()
+    candidates = candidates.sort_values(['last', 'uploads'], ascending=[True, False], na_position='first')
+    candidates = candidates.reset_index().rename(columns={'utente': 'Drinker', 'uploads': 'Uploads'})
+    candidates['Last upload'] = candidates['last'].dt.strftime('%d %b %Y').fillna('never')
+    candidates['Seen in group since'] = candidates['prima_vista'].dt.strftime('%d %b %Y').fillna('?')
+    candidates['Admin'] = candidates['admin'].astype(bool)
+
+    gone = table[(table['Status'] == 'Left') & (table['uploads'] > 0)].copy()
+    gone = gone.sort_values('last', ascending=False).reset_index().rename(columns={'utente': 'Drinker', 'uploads': 'Uploads'})
+    gone['Last upload'] = gone['last'].dt.strftime('%d %b %Y')
+
+    cols = ['Drinker', 'Status', 'Last upload', 'Months silent', 'Uploads', 'Seen in group since', 'Admin']
+    return candidates[cols], gone[['Drinker', 'Last upload', 'Uploads']], known
+
+
 def milestones(df, ghost, step=500):
     d = df.dropna(subset=['data_ora_dt']).sort_values('data_ora_dt')
     if d.empty:

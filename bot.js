@@ -160,22 +160,26 @@ function runAiJudge(percorso_file, totaleAttuale, testoUtente) {
             if (chiuso) return;
             chiuso = true;
             clearTimeout(timer);
-            if (error) console.log(`⚠️ Errore AI: ${error.message}`);
-            // Prendi l'ULTIMA occorrenza: quella finale del Notaio,
-            // non quella stampata nei debug delle risposte grezze
-            const occorrenze = stdout ? [...stdout.matchAll(/BEERS_FOUND:\s*(\d+)/g)] : [];
-            if (occorrenze.length > 0) {
-                resolve(parseInt(occorrenze[occorrenze.length - 1][1], 10));
-            } else {
-                resolve(0); // il chiamante fa il clamp a 1
+            const output = stdout || '';
+            // Prendi l'ULTIMA riga "BEERS_FOUND: n" (quella finale del Notaio, non i debug).
+            // null = l'AI NON ha potuto giudicare (quota finita, 404, timeout, crash):
+            // ai_judge.py in quel caso stampa [FATAL] ma termina comunque con BEERS_FOUND: 0.
+            const occorrenze = [...output.matchAll(/^BEERS_FOUND:\s*(-?\d+)\s*$/gm)];
+            const valore = occorrenze.length ? Number(occorrenze[occorrenze.length - 1][1]) : null;
+            if (error || /\[FATAL\]|\[ERRORE\].*non esiste/.test(output) || valore === null || valore < 0) {
+                const riga = output.split('\n').find(r => /\[FATAL\]|ha fallito|\[ERRORE\]/.test(r)) || '';
+                console.log(`⚠️ Analisi AI fallita${error ? ` (${error.message})` : ''}: ${riga.trim().slice(0, 200)}`);
+                resolve(null);
+                return;
             }
+            resolve(valore);
         });
         const timer = setTimeout(() => {
             if (chiuso) return;
             console.log(`⏱️ Timeout AI (${AI_TIMEOUT_MS / 1000}s). Kill.`);
             try { child.kill("SIGKILL"); } catch (e) {}
             chiuso = true;
-            resolve(0);
+            resolve(null);
         }, AI_TIMEOUT_MS);
     });
 }
@@ -299,7 +303,137 @@ async function initDatabase() {
     db = await open({ filename: DB_PATH, driver: sqlite3.Database });
     await db.run('PRAGMA journal_mode=WAL');
     await db.run('PRAGMA busy_timeout = 30000');
+    // Foto che l'AI non ha potuto giudicare (quota finita, timeout, errore):
+    // NON finiscono in log_birre a 0, restano qui finché riprova_foto_in_attesa.py le smaltisce.
+    await db.run(`CREATE TABLE IF NOT EXISTS foto_in_attesa (
+        nome_file TEXT PRIMARY KEY,
+        data_ora TEXT,
+        utente TEXT,
+        testo TEXT,
+        tentativi INTEGER DEFAULT 0,
+        ultimo_errore TEXT,
+        creato TEXT DEFAULT (datetime('now','localtime'))
+    )`);
+    // Istantanea giornaliera dei membri del gruppo (per la "Death Row" della dashboard).
+    // Si salva SOLO l'etichetta mascherata ("+39 *** 1234"), mai il numero completo:
+    // questo DB finisce su GitHub.
+    await db.run(`CREATE TABLE IF NOT EXISTS membri_gruppo (
+        utente TEXT PRIMARY KEY,
+        prima_vista TEXT NOT NULL,
+        ultima_vista TEXT NOT NULL,
+        admin INTEGER NOT NULL DEFAULT 0
+    )`);
     console.log('📦 Database SQLite pronto (WAL mode)');
+}
+
+// ==========================================
+// MEMBRI DEL GRUPPO: istantanea giornaliera
+// ==========================================
+function oggiRoma() {
+    return new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' }); // YYYY-MM-DD
+}
+
+async function etichettaPartecipante(partecipante) {
+    // Stessa logica di risolviIdentita(), così l'etichetta coincide con quella in log_birre.
+    const id = (partecipante && partecipante.id) || {};
+    const parteLocale = String(id.user || '');
+    const server = String(id.server || '');
+    if (!parteLocale) return null;
+
+    if (server === 'c.us') {
+        const soloNumeri = parteLocale.replace(/[^0-9]/g, '');
+        const pref = estraiPrefisso(soloNumeri);
+        if (soloNumeri.length >= 7 && pref !== '+??') return `${pref} *** ${soloNumeri.slice(-4)}`;
+    }
+    if (cacheIdentita.has(parteLocale)) return cacheIdentita.get(parteLocale);
+
+    try {
+        const contact = await client.getContactById(id._serialized || `${parteLocale}@${server}`);
+        const grezzo = contact && (contact.number || (contact.id && contact.id.user));
+        const soloNumeri = String(grezzo || '').replace(/[^0-9]/g, '');
+        const pref = estraiPrefisso(soloNumeri);
+        if (soloNumeri.length >= 7 && soloNumeri.length <= 15 && pref !== '+??') {
+            const risultato = `${pref} *** ${soloNumeri.slice(-4)}`;
+            cacheIdentita.set(parteLocale, risultato);
+            return risultato;
+        }
+    } catch (e) {}
+
+    const cifre = parteLocale.replace(/[^0-9]/g, '');
+    const risultato = `🔒 *** ${(cifre || parteLocale).slice(-4)}`;
+    cacheIdentita.set(parteLocale, risultato);
+    return risultato;
+}
+
+async function aggiornaMembriGruppo() {
+    try {
+        const tutteLeChat = await client.getChats();
+        const gruppo = tutteLeChat.find(c => c.name === NOME_GRUPPO_BERSAGLIO);
+        if (!gruppo) { console.log('👥 Membri: gruppo non trovato.'); return; }
+
+        let chat = gruppo;
+        try { chat = await client.getChatById(gruppo.id._serialized); } catch (e) {}
+        const partecipanti = Array.isArray(chat.participants) && chat.participants.length
+            ? chat.participants : (gruppo.participants || []);
+        if (!partecipanti.length) { console.log('👥 Membri: elenco partecipanti vuoto, salto.'); return; }
+
+        // Guardia: un elenco molto più corto dell'ultima istantanea è quasi certamente
+        // un caricamento parziale di WhatsApp, non un'uscita di massa. Non segnare nessuno come uscito.
+        const precedente = await db.get("SELECT valore FROM config WHERE chiave='MEMBRI_SNAPSHOT'");
+        const snapshotPrecedente = precedente ? String(precedente.valore) : null;
+        if (snapshotPrecedente) {
+            const row = await db.get('SELECT COUNT(*) AS n FROM membri_gruppo WHERE ultima_vista = ?', [snapshotPrecedente]);
+            const nPrec = row ? row.n : 0;
+            if (nPrec >= 20 && partecipanti.length < nPrec * 0.5) {
+                console.log(`👥 Membri: solo ${partecipanti.length} partecipanti contro ${nPrec} ieri. Elenco parziale? Salto.`);
+                return;
+            }
+        }
+
+        const oggi = oggiRoma();
+        const etichette = new Map();
+        for (const p of partecipanti) {
+            const etichetta = await etichettaPartecipante(p);
+            if (!etichetta) continue;
+            const admin = Boolean(p.isAdmin || p.isSuperAdmin) ? 1 : 0;
+            etichette.set(etichetta, Math.max(admin, etichette.get(etichetta) || 0));
+        }
+
+        await db.run('BEGIN IMMEDIATE');
+        try {
+            for (const [utente, admin] of etichette) {
+                await db.run(
+                    `INSERT INTO membri_gruppo (utente, prima_vista, ultima_vista, admin) VALUES (?, ?, ?, ?)
+                     ON CONFLICT(utente) DO UPDATE SET ultima_vista = excluded.ultima_vista, admin = excluded.admin`,
+                    [utente, oggi, oggi, admin]
+                );
+            }
+            await db.run("INSERT OR REPLACE INTO config (chiave, valore) VALUES ('MEMBRI_SNAPSHOT', ?)", [oggi]);
+            await db.run('COMMIT');
+        } catch (e) {
+            await db.run('ROLLBACK');
+            throw e;
+        }
+
+        const usciti = await db.get('SELECT COUNT(*) AS n FROM membri_gruppo WHERE ultima_vista < ?', [oggi]);
+        const nuovi = await db.get('SELECT COUNT(*) AS n FROM membri_gruppo WHERE prima_vista = ?', [oggi]);
+        console.log(`👥 Membri: ${etichette.size} nel gruppo oggi | nuovi: ${nuovi ? nuovi.n : 0} | usciti/rimossi finora: ${usciti ? usciti.n : 0}`);
+    } catch (e) {
+        console.log('⚠️ Istantanea membri fallita:', e.message);
+    }
+}
+
+async function mettiInAttesa(nome_file, data_ora, utente, testo, motivo) {
+    try {
+        await db.run(
+            `INSERT OR IGNORE INTO foto_in_attesa (nome_file, data_ora, utente, testo, tentativi, ultimo_errore)
+             VALUES (?, ?, ?, ?, 1, ?)`,
+            [nome_file, data_ora, utente, (testo || "").slice(0, 500), motivo]
+        );
+        console.log(`⏸️ FOTO IN ATTESA: ${nome_file} (${motivo}). La riprova il job notturno.`);
+    } catch (err) {
+        console.log("⚠️ Errore DB (foto_in_attesa):", err.message);
+    }
 }
 
 // ==========================================
@@ -323,6 +457,17 @@ client.on('ready', () => {
     tentativiRiconnessione = 0;
     console.log(`✅ Bot connesso come ${client.info.wid.user}`);
     console.log('✅ In attesa di birre...');
+    // Prima istantanea membri dopo 2 minuti (WhatsApp deve finire di caricare le chat),
+    // solo se oggi non è ancora stata fatta: così la Death Row ha dati subito dopo il deploy.
+    setTimeout(async () => {
+        try {
+            const row = await db.get("SELECT valore FROM config WHERE chiave='MEMBRI_SNAPSHOT'");
+            if (!row || String(row.valore) !== oggiRoma()) {
+                await aggiornaMembriGruppo();
+                await sincronizzaGit("👥 Istantanea membri del gruppo");
+            }
+        } catch (e) { console.log('⚠️ Istantanea membri all\'avvio fallita:', e.message); }
+    }, 2 * 60 * 1000);
 });
 
 client.on('auth_failure', (msg) => {
@@ -378,6 +523,7 @@ setInterval(async () => {
     if (ore >= 7 && ultimoSyncDate !== oggi) {
         console.log(`⏰ Sync giornaliero delle 7:00 - avviato il ${oggi}`);
         await syncPeriodicoConChat();
+        await aggiornaMembriGruppo();      // prima della POTD: così il push include anche i membri
         await pubblicaFotoDelGiorno();
         ultimoSyncDate = oggi;
     }
@@ -557,6 +703,11 @@ if (chat.name !== NOME_GRUPPO_BERSAGLIO) {
                         console.log(`🤖 Analisi AI (binaria): ${nome_file}`);
                         const totaleAttuale = await leggiTotale();
                         const conteggio = await runAiJudge(percorso_file, totaleAttuale, testo);
+                        if (conteggio === null) {
+                            // Nessun verdetto: non è "niente birra", è "non ho potuto guardare".
+                            await mettiInAttesa(nome_file, data_ora, autore, testo, "AI non disponibile");
+                            return;
+                        }
                         // L'AI ora risponde 0 (niente birra) o >=1 (birra presente)
                         const delta = conteggio >= 1 ? 1 : 0;
                         

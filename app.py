@@ -40,7 +40,28 @@ def load_data():
     return df, (int(row[0]) if row else 0), report, mtime
 
 
+@st.cache_data(ttl=60)
+def load_members():
+    """Istantanea membri scritta dal bot (tabella opzionale: assente nei DB vecchi)."""
+    try:
+        conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+        try:
+            exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='membri_gruppo'").fetchone()
+            if not exists:
+                return None, None
+            members = pd.read_sql_query(
+                "SELECT utente, prima_vista, ultima_vista, admin FROM membri_gruppo", conn)
+            row = conn.execute("SELECT valore FROM config WHERE chiave='MEMBRI_SNAPSHOT'").fetchone()
+        finally:
+            conn.close()
+    except Exception:
+        return None, None
+    return members, (str(row[0]) if row else None)
+
+
 df, OFFICIAL_TOTAL_DB, REPORT, DB_MTIME = load_data()
+MEMBERS, MEMBERS_SNAPSHOT = load_members()
 if df.empty:
     st.error(f"No data found! Looks like the keg is empty. {REPORT.get('error', '')}")
     st.stop()
@@ -276,7 +297,7 @@ tab_lb, tab_stats, tab_nat, tab_player, tab_data = st.tabs(
 
 # ---------- LEADERBOARDS ----------
 with tab_lb:
-    t1, t2, t3, t4 = st.tabs(["👑 All-Time Legends", "🔥 7-Day Heroes", "🚨 Wall of Shame", "🤓 Nerd Stats"])
+    t1, t2, t3, t4, t5 = st.tabs(["👑 All-Time Legends", "🔥 7-Day Heroes", "🚨 Wall of Shame", "🤓 Nerd Stats", "💀 Death Row"])
     with t1:
         st.caption("Score = pints in photos + 5 pts per 'down' video.")
         st.dataframe(leaderboard.head(15)[['Flag', 'Drinker', 'Total Score', 'Regular Pints', 'Downs']], width="stretch")
@@ -305,6 +326,37 @@ with tab_lb:
         st.dataframe(users.sort_values('Avg Pints / Upload', ascending=False).head(10).reset_index()
                      .rename(columns={'utente': 'Drinker', 'uploads': 'Uploads'})[['Drinker', 'Avg Pints / Upload', 'Uploads']],
                      hide_index=True, width="stretch")
+    with t5:
+        st.caption("Members who haven't posted a beer in months. Admins: this is your removal list. ⚰️")
+        dr_months = st.slider("Months of silence before the sentence", 1, 12, 3, key="death_row_months")
+        if MEMBERS is not None:
+            MEMBERS_NORM = MEMBERS.assign(
+                utente=MEMBERS['utente'].astype(str).str.strip().map(lambda u: REPORT.get('aliases', {}).get(u, u)))
+        else:
+            MEMBERS_NORM = None
+        row_df, gone_df, membership_known = S.death_row(fdf, MEMBERS_NORM, MEMBERS_SNAPSHOT, ref_day, dr_months)
+        if membership_known:
+            in_group = int((MEMBERS_NORM['ultima_vista'].astype(str) == str(MEMBERS_SNAPSHOT)).sum())
+            st.caption(f"Membership checked against the bot's snapshot of **{MEMBERS_SNAPSHOT}** "
+                       f"({in_group} members). 'In group' = still inside; 'Unknown' = posted under a label "
+                       "the snapshot can't match. People who already left are excluded.")
+        else:
+            st.warning("No membership snapshot yet: the bot writes it once a day. Until then this list "
+                       "is built from uploads only, so some of these people may have already left the group.")
+        if row_df.empty:
+            st.success("Nobody on death row. The group is alive and drinking! 🍻")
+        else:
+            show = row_df.copy()
+            show['Drinker'] = show['Drinker'].map(display_name)
+            st.metric("Candidates for removal", len(show))
+            st.dataframe(show, hide_index=True, width="stretch")
+            st.download_button("⬇️ Download death row (CSV)", show.to_csv(index=False).encode(),
+                               "death_row.csv", "text/csv", key="death_row_csv")
+        if not gone_df.empty:
+            with st.expander(f"👻 Already gone: {len(gone_df)} former drinkers no longer in the group"):
+                gone_show = gone_df.copy()
+                gone_show['Drinker'] = gone_show['Drinker'].map(display_name)
+                st.dataframe(gone_show, hide_index=True, width="stretch")
 
     st.subheader("🎯 Milestone Snipers")
     ms = S.milestones(fdf, ghost_beers, MILESTONE_STEP)
