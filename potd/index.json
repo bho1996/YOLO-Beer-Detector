@@ -168,7 +168,7 @@
   "candidates": 198
  },
  "2026-10-17": {
-  "image": "2026-10-17.jpg",
+  "image": null,
   "source_file": "WA_1792246271.jpg",
   "utente": "+49 *** 8003",
   "time": "16:11",
@@ -286,5 +286,13 @@
   "time": "19:29",
   "beers": 1,
   "candidates": 452
+ },
+ "2026-11-01": {
+  "image": "2026-11-01.jpg",
+  "source_file": "WA_1793489769.jpg",
+  "utente": "+49 *** 2123",
+  "time": "00:36",
+  "beers": 1,
+  "candidates": 199
  }
 }
