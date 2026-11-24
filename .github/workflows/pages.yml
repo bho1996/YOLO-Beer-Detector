@@ -1,18 +1,20 @@
 name: Deploy website
 
-# Ogni push del bot (DB aggiornato) rigenera data.json e ripubblica il sito.
+# Il sito viene ripubblicato ogni 30 minuti e quando cambia il codice.
 on:
   push:
     branches: [main]
     paths:
-      - "1m_beers.db"
       - "potd/**"
       - "web/**"
       - "export_data.py"
       - "data_quality.py"
       - "countries.py"
       - "nicknames.json"
+      - "weekly_report.py"
       - ".github/workflows/pages.yml"
+  schedule:
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -21,7 +23,7 @@ permissions:
   id-token: write
   actions: read
 
-# Se arrivano più push ravvicinati, pubblica solo l'ultimo
+# Una sola pubblicazione alla volta: le corse non si sovrappongono.
 concurrency:
   group: pages
   cancel-in-progress: false
