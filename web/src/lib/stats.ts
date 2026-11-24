@@ -77,13 +77,13 @@ export function streaks(rows: Row[], refDay: number) {
 }
 
 export interface Milestone { value: number; u: number; t: number }
-export function milestones(rows: Row[], ghost: number, step: number): Milestone[] {
+export function milestones(rows: Row[], ghost: number, step: number, overrides: Record<number, number> = {}): Milestone[] {
   const out: Milestone[] = []
   let running = ghost
   let next = (Math.floor(ghost / step) + 1) * step
   for (const r of rows) {
     running += r.beers
-    while (running >= next) { out.push({ value: next, u: r.u, t: r.t }); next += step }
+    while (running >= next) { out.push({ value: next, u: overrides[next] ?? r.u, t: r.t }); next += step }
   }
   return out.reverse()
 }

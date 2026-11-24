@@ -28,12 +28,14 @@ export interface Dataset {
   users: User[]
   rows: Row[]           // ordinate per t
   potd: Record<string, Potd>
+  milestoneSnipers: Record<string, string>
   report: Report
 }
 
 interface RawData {
   generated_at: number; db_updated_at: number; official_total: number
   users: User[]; potd: Record<string, Potd>; report: Report
+  milestone_snipers?: Record<string, string>
   rows: { id: number[]; t: number[]; u: number[]; v: number[]; b: number[]; s: number[]; p: number[]; f: string[] }
 }
 
@@ -47,6 +49,7 @@ function parse(raw: RawData): Dataset {
   return {
     generatedAt: raw.generated_at, dbUpdatedAt: raw.db_updated_at, officialTotal: raw.official_total,
     users: raw.users, rows, potd: raw.potd, report: raw.report,
+    milestoneSnipers: raw.milestone_snipers ?? {},
   }
 }
 

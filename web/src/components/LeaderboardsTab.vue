@@ -38,7 +38,7 @@ const withName = <T extends { u: number }>(xs: T[]) => xs.map(x => ({ ...x, name
 const streakCols: Col[] = [{ key: 'name', label: 'Drinker' }, { key: 'length', label: 'Days in a row', num: true }]
 const activeCols: Col[] = [...streakCols, { key: 'last', label: 'Last beer', fmt: (d: number) => fmtDay(d, false) }]
 const bingeCols: Col[] = [{ key: 'name', label: 'Drinker' }, { key: 'day', label: 'Day', fmt: (d: number) => fmtDay(d) }, { key: 'score', label: 'Points', num: true }]
-const ms = computed(() => milestones(props.v.rows, props.v.ghost, CONFIG.milestoneStep))
+const ms = computed(() => milestones(props.v.rows, props.v.ghost, CONFIG.milestoneStep, props.v.milestoneSnipers))
 const msCols: Col[] = [
   { key: 'value', label: 'Milestone', fmt: (v: number) => `🎯 ${v.toLocaleString('en-US')}` },
   { key: 'name', label: 'Sniper' },

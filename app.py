@@ -32,10 +32,13 @@ def load_data():
         conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
         raw = pd.read_sql_query("SELECT * FROM log_birre", conn)
         row = conn.execute("SELECT valore FROM config WHERE chiave='OFFICIAL_TOTAL'").fetchone()
+        override = conn.execute("SELECT valore FROM config WHERE chiave='SNIPER_65000'").fetchone()
         conn.close()
     except Exception as e:
         return pd.DataFrame(), 0, {"error": str(e)}, None
     df, report = dq.prepare(raw, NICKNAMES)
+    if override:
+        report['sniper_overrides'] = {'65000': str(override[0])}
     mtime = pd.Timestamp(os.path.getmtime(DB_PATH), unit="s", tz="UTC").tz_convert(TZ)
     return df, (int(row[0]) if row else 0), report, mtime
 
@@ -360,7 +363,7 @@ with tab_lb:
                 st.dataframe(gone_show, hide_index=True, width="stretch")
 
     st.subheader("🎯 Milestone Snipers")
-    ms = S.milestones(fdf, ghost_beers, MILESTONE_STEP)
+    ms = S.milestones(fdf, ghost_beers, MILESTONE_STEP, REPORT.get('sniper_overrides'))
     if ms.empty:
         st.info("No milestone hit yet — the next sniper could be you!")
     else:

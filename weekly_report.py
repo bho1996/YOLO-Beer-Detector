@@ -72,6 +72,8 @@ def build(target=None):
     cfg = conn.execute("SELECT chiave, valore FROM config").fetchall()
     conn.close()
     official = int(dict(cfg).get("OFFICIAL_TOTAL", 0))
+    override = dict(cfg).get("SNIPER_65000")
+    overrides = {"65000": str(override)} if override else None
     with open(os.path.join(BASE, "nicknames.json"), encoding="utf-8") as f:
         nicknames = json.load(f)
     df, _ = dq.prepare(raw, nicknames)
@@ -104,7 +106,7 @@ def build(target=None):
     top_users = set(list(at_end)[:50])
     overtakes = sorted(find_overtakes(history, weekly, top_users), key=lambda e: e["at"])
     ghost = max(0, official - int(df["beers"].sum()))
-    ms = S.milestones(df[df["data_ora_dt"] < end], ghost, 500)
+    ms = S.milestones(df[df["data_ora_dt"] < end], ghost, 500, overrides)
     milestones = []
     for r in ms.itertuples():
         when = pd.to_datetime(getattr(r, "Date"), format="%d %b %Y, %H:%M", errors="coerce")

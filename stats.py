@@ -147,7 +147,7 @@ def death_row(df, members, snapshot, ref_day, months=3):
     return candidates[cols], gone[['Drinker', 'Last upload', 'Uploads']], known
 
 
-def milestones(df, ghost, step=500):
+def milestones(df, ghost, step=500, overrides=None):
     d = df.dropna(subset=['data_ora_dt']).sort_values('data_ora_dt')
     if d.empty:
         return pd.DataFrame()
@@ -157,7 +157,8 @@ def milestones(df, ghost, step=500):
     while m <= top:
         pos = (running >= m).to_numpy().argmax()
         row = d.iloc[pos]
-        out.append({'Milestone': f"{m:,} Beers", 'Sniper': row['utente'],
+        sniper = str(overrides.get(str(m), row['utente'])) if overrides else row['utente']
+        out.append({'Milestone': f"{m:,} Beers", 'Sniper': sniper,
                     'Date': row['data_ora_dt'].strftime('%d %b %Y, %H:%M'),
                     'Total Reached': int(running.iloc[pos])})
         m += step
