@@ -1,10 +1,11 @@
 name: Deploy website
 
-# Il sito viene ripubblicato ogni 30 minuti e quando cambia il codice.
+# Il sito si aggiorna a ogni commit del DB e del codice, più ogni 30 minuti.
 on:
   push:
     branches: [main]
     paths:
+      - "1m_beers.db"
       - "potd/**"
       - "web/**"
       - "export_data.py"
@@ -76,8 +77,13 @@ jobs:
             n=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" \
               --jq '[.artifacts[] | select(.name == "github-pages")] | length')
             if [ "$n" -ge 1 ]; then
-              echo "Artifact github-pages visibile"
-              exit 0
+              sleep 8
+              n2=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" \
+                --jq '[.artifacts[] | select(.name == "github-pages")] | length')
+              if [ "$n2" -ge 1 ]; then
+                echo "Artifact github-pages visibile"
+                exit 0
+              fi
             fi
             echo "Artifact non ancora visibile, riprovo tra 5s ($i/12)"
             sleep 5
