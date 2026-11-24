@@ -4,6 +4,7 @@ const fs = require('fs');
 const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
 const { execFile, exec } = require('child_process');
+const crypto = require('crypto');
 
 // --- CONFIGURAZIONI ---
 const NOME_GRUPPO_BERSAGLIO = "1 million beers 🍻";
@@ -18,6 +19,44 @@ const SYNC_FINESTRA = 3000;         // il sync considera valori entro ±3000 dal
 const SYNC_CONSENSO_MIN = 3;        // messaggi concordi necessari per correzioni > 100
 const SYNC_CONSENSO_TOLL = 30;      // "concordi" = entro 30 birre l'uno dall'altro
 const SYNC_INTERVALLO_MS = 15 * 60 * 1000;  // sync periodico ogni 15 min
+const CONSENSO_FINESTRA_MS = 10 * 60 * 1000; // 2 persone entro 10 minuti per alzare il totale
+const pendingTotals = new Map();
+const mediaIndex = new Map();               // dimensione file -> nomi file
+
+function hashFile(percorso) {
+    return crypto.createHash('md5').update(fs.readFileSync(percorso)).digest('hex');
+}
+
+function indicizzaMedia() {
+    mediaIndex.clear();
+    for (const nome of fs.readdirSync(CARTELLA_MEDIA)) {
+        if (!/^WA_\d+\.(jpg|mp4)$/.test(nome)) continue;
+        try {
+            const size = fs.statSync(`${CARTELLA_MEDIA}/${nome}`).size;
+            if (!mediaIndex.has(size)) mediaIndex.set(size, []);
+            mediaIndex.get(size).push(nome);
+        } catch (e) { /* file sparito durante la scansione */ }
+    }
+}
+
+function eDuplicato(nome_file, hash) {
+    try {
+        const size = fs.statSync(`${CARTELLA_MEDIA}/${nome_file}`).size;
+        for (const altro of mediaIndex.get(size) || []) {
+            if (altro === nome_file) continue;
+            if (hashFile(`${CARTELLA_MEDIA}/${altro}`) === hash) return true;
+        }
+    } catch (e) { /* file non leggibile */ }
+    return false;
+}
+
+function registraMedia(nome_file) {
+    try {
+        const size = fs.statSync(`${CARTELLA_MEDIA}/${nome_file}`).size;
+        if (!mediaIndex.has(size)) mediaIndex.set(size, []);
+        if (!mediaIndex.get(size).includes(nome_file)) mediaIndex.get(size).push(nome_file);
+    } catch (e) { /* ignore */ }
+}
 
 if (!fs.existsSync(CARTELLA_MEDIA)) {
     fs.mkdirSync(CARTELLA_MEDIA);
@@ -95,17 +134,43 @@ async function avanzaTotale(delta, fonte) {
     return nuovoTotale;
 }
 
-async function allineaTotale(nuovoValore, fonte) {
+async function allineaTotale(nuovoValore, fonte, utente) {
     const totaleAttuale = await leggiTotale();
-    if (nuovoValore <= totaleAttuale) {
-        console.log(`ℹ️ [${fonte}] ${nuovoValore} ≤ ${totaleAttuale}. Ignorato (no rollback).`);
-        return { aggiornato: false, delta: 0 };
+    if (nuovoValore === totaleAttuale) return { aggiornato: false, delta: 0 };
+
+    if (nuovoValore < totaleAttuale) {
+        const eccesso = totaleAttuale - nuovoValore;
+        if (eccesso > 100) {
+            console.log(`⚠️ [${fonte}] Ribasso di ${eccesso} troppo grande. Ignorato (outlier).`);
+            return { aggiornato: false, delta: 0 };
+        }
+        await db.run("INSERT OR REPLACE INTO config (chiave, valore) VALUES ('OFFICIAL_TOTAL', ?)", nuovoValore);
+        console.log(`🔽 [${fonte}] Totale: ${totaleAttuale} → ${nuovoValore} (-${eccesso})`);
+        return { aggiornato: true, delta: -eccesso };
     }
+
     const salto = nuovoValore - totaleAttuale;
     if (salto > SALTO_MAX_SICUREZZA) {
         console.log(`⚠️ [${fonte}] Salto +${salto} eccessivo (${nuovoValore}). Probabile typo. NON blocco, ignoro.`);
         return { aggiornato: false, delta: 0 };
     }
+    const ora = Date.now();
+    let richiesta = pendingTotals.get(nuovoValore);
+    if (!richiesta || ora - richiesta.firstAt > CONSENSO_FINESTRA_MS) {
+        richiesta = { utenti: new Set(), firstAt: ora };
+        pendingTotals.set(nuovoValore, richiesta);
+        if (pendingTotals.size > 50) {
+            for (const [v, r] of pendingTotals) {
+                if (ora - r.firstAt > CONSENSO_FINESTRA_MS) pendingTotals.delete(v);
+            }
+        }
+    }
+    richiesta.utenti.add(utente);
+    if (richiesta.utenti.size < 2) {
+        console.log(`⏳ [${fonte}] ${nuovoValore} in attesa di consenso (${richiesta.utenti.size}/2).`);
+        return { aggiornato: false, delta: 0 };
+    }
+    pendingTotals.delete(nuovoValore);
     await db.run("INSERT OR REPLACE INTO config (chiave, valore) VALUES ('OFFICIAL_TOTAL', ?)", nuovoValore);
     console.log(`🏆 [${fonte}] Totale: ${totaleAttuale} → ${nuovoValore} (+${salto})`);
     return { aggiornato: true, delta: salto };
@@ -668,13 +733,16 @@ if (chat.name !== NOME_GRUPPO_BERSAGLIO) {
         // ---------- MESSAGGIO SOLO TESTO CON TOTALE (mai bloccante) ----------
         if (matchTotale && !msg.hasMedia) {
             let nuovoValore = parseInt(matchTotale[matchTotale.length - 1]);
-            const risultato = await allineaTotale(nuovoValore, "Testo");
+            const risultato = await allineaTotale(nuovoValore, "Testo", autore);
 
             if (risultato.aggiornato) {
                 // NB: il vecchio "VAR retroattivo" (scriveva il salto come punti dell'ultima foto
                 // dell'autore) è disattivato: ogni foto conta sempre 1, il salto resta solo nel
                 // totale ufficiale.
-                await sincronizzaGit(`🤖 Auto-update: totale a ${nuovoValore}`);
+                    const msgCommit = risultato.delta < 0
+                        ? `🤖 Auto-sync: corretto eccesso, totale a ${nuovoValore}`
+                        : `🤖 Auto-update: totale a ${nuovoValore}`;
+                    await sincronizzaGit(msgCommit);
             }
         }
 
@@ -695,6 +763,15 @@ if (chat.name !== NOME_GRUPPO_BERSAGLIO) {
                 fs.writeFileSync(percorso_file, media.data, 'base64');
                 console.log(`📎 Salvato: ${nome_file}`);
 
+                const hashMedia = crypto.createHash('md5').update(media.data, 'base64').digest('hex');
+                const duplicato = eDuplicato(nome_file, hashMedia);
+                if (duplicato) {
+                    console.log(`♻️ Contenuto già visto: ${nome_file} → 0 punti (nessun +1 al totale).`);
+                    await inserisciNelDB(data_ora, autore, nome_file, 0, tipo_file);
+                    return;
+                }
+                registraMedia(nome_file);
+
                 if (tipo_file === "video" && testo.match(regex_numeri_birra)) {
                     await inserisciNelDB(data_ora, autore, nome_file, 5, "video");
                 } else if (tipo_file === "foto") {
@@ -711,13 +788,15 @@ if (chat.name !== NOME_GRUPPO_BERSAGLIO) {
                         // L'AI ora risponde 0 (niente birra) o >=1 (birra presente)
                         const delta = conteggio >= 1 ? 1 : 0;
                         
-                        if (delta > 0) {
+                        const inserito = await inserisciNelDB(data_ora, autore, nome_file, delta, "foto");
+                        if (inserito && delta > 0) {
                             await avanzaTotale(delta, `Foto ${nome_file}`);
                             console.log(`✅ FOTO: AI ha visto birra → +${delta} punto`);
+                        } else if (!inserito) {
+                            console.log(`♻️ FOTO già presente: ${nome_file} → nessun +1`);
                         } else {
                             console.log(`⛔ FOTO: AI non ha visto birra → 0 punti (foto scartata)`);
                         }
-                        await inserisciNelDB(data_ora, autore, nome_file, delta, "foto");
                     });
                     smaltisciCoda();
 
@@ -739,11 +818,13 @@ async function inserisciNelDB(d_ora, utente, file, punti, tipo) {
             [d_ora, utente, file, punti, tipo]
         );
         const changes = await db.get('SELECT changes() as cnt');
-        if (changes.cnt === 0) return;
+        if (changes.cnt === 0) return false;
         console.log(`🏅 PUNTI: ${utente} +${punti} (${file})`);
         await sincronizzaGit();
+        return true;
     } catch (err) {
         console.log("⚠️ Errore DB:", err.message);
+        return false;
     }
 }
 
@@ -752,5 +833,6 @@ async function inserisciNelDB(d_ora, utente, file, punti, tipo) {
 // ==========================================
 (async () => {
     await initDatabase();
+    indicizzaMedia();
     client.initialize();
 })();
