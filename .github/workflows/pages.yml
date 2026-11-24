@@ -19,6 +19,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  actions: read
 
 # Se arrivano più push ravvicinati, pubblica solo l'ultimo
 concurrency:
@@ -63,5 +64,23 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web/dist
+
+      - name: Attendi visibilità artifact github-pages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for i in $(seq 1 12); do
+            n=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" \
+              --jq '[.artifacts[] | select(.name == "github-pages")] | length')
+            if [ "$n" -ge 1 ]; then
+              echo "Artifact github-pages visibile"
+              exit 0
+            fi
+            echo "Artifact non ancora visibile, riprovo tra 5s ($i/12)"
+            sleep 5
+          done
+          echo "Artifact github-pages non trovato" >&2
+          exit 1
+
       - id: deployment
         uses: actions/deploy-pages@v4
