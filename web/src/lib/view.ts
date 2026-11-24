@@ -21,6 +21,7 @@ export interface View {
 export function buildView(data: Dataset, refT: number, isLive: boolean): View {
   const n = cutoff(data.rows, refT)
   const rows = data.rows.slice(0, n)
+  const prevRows = data.rows.slice(0, cutoff(data.rows, refT - 7 * MIN_PER_DAY))
   let all = 0
   for (const r of data.rows) all += r.beers
   // Il totale ufficiale arriva dal gruppo (OFFICIAL_TOTAL): la differenza con le birre
@@ -35,7 +36,7 @@ export function buildView(data: Dataset, refT: number, isLive: boolean): View {
   return {
     data, rows, refT, refDay: dayOf(refT), isLive,
     ghost, total: ghost + upTo,
-    lb: leaderboard(rows, data.users),
+    lb: leaderboard(rows, data.users, prevRows),
     name: u => data.users[u]?.name ?? '?',
     flag: u => data.users[u]?.flag ?? '🏴‍☠️',
     sumDay: day => perDay.get(day) || 0,

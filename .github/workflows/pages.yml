@@ -60,6 +60,7 @@ jobs:
           npm ci
           npm run build
           python ../export_data.py dist
+          python ../weekly_report.py dist
 
       - uses: actions/upload-pages-artifact@v3
         with:

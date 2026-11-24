@@ -12,6 +12,7 @@ import StatsTab from './components/StatsTab.vue'
 import NationsTab from './components/NationsTab.vue'
 import PlayerTab from './components/PlayerTab.vue'
 import HealthTab from './components/HealthTab.vue'
+import WeeklyTab from './components/WeeklyTab.vue'
 import SupportFooter from './components/SupportFooter.vue'
 
 const { data, error, lastCheck } = useDataset()
@@ -29,6 +30,7 @@ const TABS = [
   { id: 'nations', label: '🌍 Nations' },
   { id: 'player', label: '👤 Player' },
   { id: 'health', label: '🩺 Data Health' },
+  { id: 'weekly', label: '📰 Weekly' },
 ] as const
 type TabId = typeof TABS[number]['id']
 const params = new URLSearchParams(location.search)
@@ -123,6 +125,7 @@ const updatedAgo = computed(() => {
         <NationsTab v-else-if="tab === 'nations'" :v="view" />
         <PlayerTab v-else-if="tab === 'player'" :v="view" :player="playerU" @player="openPlayer" />
         <HealthTab v-else-if="tab === 'health'" :v="view" />
+        <WeeklyTab v-else-if="tab === 'weekly'" :v="view" />
       </section>
 
       <SupportFooter />

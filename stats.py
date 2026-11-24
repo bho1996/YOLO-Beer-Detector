@@ -6,7 +6,7 @@ import pandas as pd
 from countries import get_country, flag_of
 
 
-def build_leaderboard(df, top_n=None, medals=True):
+def build_leaderboard(df, top_n=None, medals=True, reference_df=None):
     """Classifica per 'score' (foto = birre, video = 5 punti)."""
     if df.empty:
         return pd.DataFrame(columns=['Flag', 'Drinker', 'Total Score', 'Regular Pints', 'Downs'])
@@ -27,11 +27,20 @@ def build_leaderboard(df, top_n=None, medals=True):
         lb = lb.head(top_n)
     lb.index = range(1, len(lb) + 1)
     lb['Name'] = lb['Drinker']
+    if reference_df is not None and not reference_df.empty:
+        prev = {row['Name']: int(pos) for pos, row in build_leaderboard(reference_df, medals=False).iterrows()}
+        def arrow(name):
+            d = prev.get(name, 0) - int(lb.index[lb['Name'] == name][0])
+            return f"↑{d}" if d > 0 else f"↓{-d}" if d < 0 else "–"
+        lb['Move'] = lb['Name'].apply(arrow)
     if medals:
         for pos, m in ((1, "🥇 "), (2, "🥈 "), (3, "🥉 ")):
             if len(lb) >= pos:
                 lb.loc[pos, 'Drinker'] = m + str(lb.loc[pos, 'Drinker'])
-    return lb[['Flag', 'Drinker', 'Total Score', 'Regular Pints', 'Downs', 'Nation', 'Name']]
+    cols = ['Flag', 'Drinker', 'Total Score', 'Regular Pints', 'Downs', 'Nation', 'Name']
+    if 'Move' in lb:
+        cols.append('Move')
+    return lb[cols]
 
 
 def daily_series(df, col='beers'):

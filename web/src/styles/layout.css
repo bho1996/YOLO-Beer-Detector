@@ -29,6 +29,7 @@
 /* grids */
 .grid { display: grid; gap: 14px; }
 .g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.g5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .g32 { grid-template-columns: 3fr 2fr; }
@@ -40,6 +41,7 @@
 @media (max-width: 900px) {
   .hero, .g32, .g2 { grid-template-columns: 1fr; }
   .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .g5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .g3 { grid-template-columns: 1fr; }
   .glass { max-width: 150px !important; }
   .topbar-inner { flex-wrap: wrap; }
