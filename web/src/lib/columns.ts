@@ -9,6 +9,7 @@ const MEDALS = ['🥇', '🥈', '🥉']
 
 export const lbCols = (showUploads = false): Col[] => [
   { key: 'rank', label: '#', fmt: (r: number) => MEDALS[r - 1] ?? String(r) },
+  { key: 'delta', label: '↕', num: true, fmt: (d: number) => d > 0 ? `↑${d}` : d < 0 ? `↓${-d}` : '–' },
   { key: 'name', label: 'Drinker', fmt: (n: string, row: any) => `${row.flag}  ${n}` },
   { key: 'score', label: 'Score', num: true },
   { key: 'pints', label: '🍺 Pints', num: true },

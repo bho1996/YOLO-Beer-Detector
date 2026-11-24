@@ -4,7 +4,7 @@ import type { View } from '../lib/view'
 import { dayStart } from '../lib/view'
 import { leaderboard, streaks, binges, milestones } from '../lib/stats'
 import { lbCols, type Col } from '../lib/columns'
-import { fmtDay, fmtDateTime, weekdayOf, monthKey } from '../lib/time'
+import { fmtDay, fmtDateTime, weekdayOf, monthKey, MIN_PER_DAY } from '../lib/time'
 import { CONFIG } from '../config'
 import DataTable from './DataTable.vue'
 
@@ -20,10 +20,13 @@ const board = computed(() => {
   if (period.value === 'all') return props.v.lb
   if (period.value === 'week') {
     const from = dayStart(refDay - weekdayOf(refDay))
-    return leaderboard(rows.filter(r => r.t >= from), props.v.data.users)
+    const reference = rows.filter(r => r.t >= from - 7 * MIN_PER_DAY && r.t < from)
+    return leaderboard(rows.filter(r => r.t >= from), props.v.data.users, reference)
   }
   const mk = monthKey(refT)
-  return leaderboard(rows.filter(r => monthKey(r.t) === mk), props.v.data.users)
+  const current = rows.filter(r => monthKey(r.t) === mk)
+  const reference = current.length ? rows.filter(r => monthKey(r.t) === monthKey(current[0].t - 1)) : []
+  return leaderboard(current, props.v.data.users, reference)
 })
 const filtered = computed(() => {
   const s = q.value.trim().toLowerCase()
@@ -54,7 +57,7 @@ const msCols: Col[] = [
   <div v-if="period !== 'fame'" class="card">
     <input v-model="q" type="search" placeholder="🔎 Search a drinker or a country…" style="margin-bottom:12px" />
     <DataTable :cols="lbCols(true)" :rows="filtered" clickable sortable :pageSize="25" @select="r => emit('player', r.u)" />
-    <p class="small muted">{{ board.length.toLocaleString('en-US') }} drinkers · photo = 1 point, down video = 5 points.</p>
+    <p class="small muted">{{ board.length.toLocaleString('en-US') }} drinkers · photo = 1 point, down video = 5 points. ↑/↓ = rank change vs the previous period.</p>
   </div>
 
   <div v-else class="grid g2">

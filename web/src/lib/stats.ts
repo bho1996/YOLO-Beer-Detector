@@ -3,7 +3,7 @@ import { dayOf, hourOf, weekdayOf, fmtDay, fmtDateTime, monthKey, MIN_PER_DAY } 
 
 export interface LbEntry {
   rank: number; u: number; name: string; flag: string; nation: string
-  score: number; pints: number; downs: number; uploads: number
+  score: number; pints: number; downs: number; uploads: number; delta: number
 }
 
 export function sumBeers(rows: Row[], from = -Infinity, to = Infinity): number {
@@ -12,13 +12,13 @@ export function sumBeers(rows: Row[], from = -Infinity, to = Infinity): number {
   return s
 }
 
-export function leaderboard(rows: Row[], users: User[]): LbEntry[] {
+export function leaderboard(rows: Row[], users: User[], referenceRows: Row[] = []): LbEntry[] {
   const m = new Map<number, LbEntry>()
   for (const r of rows) {
     let e = m.get(r.u)
     if (!e) {
       const us = users[r.u]
-      e = { rank: 0, u: r.u, name: us.name, flag: us.flag, nation: us.nation, score: 0, pints: 0, downs: 0, uploads: 0 }
+      e = { rank: 0, u: r.u, name: us.name, flag: us.flag, nation: us.nation, score: 0, pints: 0, downs: 0, uploads: 0, delta: 0 }
       m.set(r.u, e)
     }
     e.score += r.score
@@ -28,6 +28,11 @@ export function leaderboard(rows: Row[], users: User[]): LbEntry[] {
   }
   const lb = [...m.values()].sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
   lb.forEach((e, i) => { e.rank = i + 1 })
+  if (referenceRows.length) {
+    const prev = leaderboard(referenceRows, users)
+    const ranks = new Map(prev.map(e => [e.u, e.rank]))
+    for (const e of lb) e.delta = (ranks.get(e.u) ?? 0) - e.rank
+  }
   return lb
 }
 

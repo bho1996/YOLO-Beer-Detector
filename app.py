@@ -134,7 +134,8 @@ today_beers = int(today_df['beers'].sum())
 yesterday_beers = window_sum(ref_day - pd.Timedelta(days=1), ref_day)
 best_day_beers = int(daily.max()) if not daily.empty else 0
 best_day_str = daily.idxmax().strftime('%d %b %Y') if not daily.empty else "N/A"
-leaderboard = S.build_leaderboard(fdf)
+leaderboard = S.build_leaderboard(
+    fdf, reference_df=fdf[fdf['data_ora_dt'] < ref_day - pd.Timedelta(days=7)])
 
 # ==========================================
 # HEADER
@@ -300,7 +301,7 @@ with tab_lb:
     t1, t2, t3, t4, t5 = st.tabs(["👑 All-Time Legends", "🔥 7-Day Heroes", "🚨 Wall of Shame", "🤓 Nerd Stats", "💀 Death Row"])
     with t1:
         st.caption("Score = pints in photos + 5 pts per 'down' video.")
-        st.dataframe(leaderboard.head(15)[['Flag', 'Drinker', 'Total Score', 'Regular Pints', 'Downs']], width="stretch")
+        st.dataframe(leaderboard.head(15)[['Flag', 'Drinker', 'Move', 'Total Score', 'Regular Pints', 'Downs']], width="stretch")
         st.download_button("⬇️ Download full leaderboard (CSV)",
                            leaderboard.drop(columns=['Drinker']).to_csv(index_label='Rank').encode(),
                            "1m_beers_leaderboard.csv", "text/csv")
