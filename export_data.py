@@ -32,6 +32,7 @@ def main():
     conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     raw = pd.read_sql_query("SELECT * FROM log_birre", conn)
     row = conn.execute("SELECT valore FROM config WHERE chiave='OFFICIAL_TOTAL'").fetchone()
+    override = conn.execute("SELECT valore FROM config WHERE chiave='SNIPER_65000'").fetchone()
     conn.close()
     with open(os.path.join(BASE, "nicknames.json"), encoding="utf-8") as f:
         nicknames = json.load(f)
@@ -84,6 +85,7 @@ def main():
         "users": [{"name": r.utente, "nation": r.nation, "flag": flag_of(r.nation)} for r in users.itertuples()],
         "rows": rows,
         "potd": dict(sorted(potd.items())),
+        "milestone_snipers": {"65000": str(override[0])} if override else {},
         "report": {
             "rows": report["rows"],
             "ts_fixed": report["ts_fixed"],

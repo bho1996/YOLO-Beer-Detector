@@ -13,6 +13,7 @@ export interface View {
   ghost: number        // birre del gruppo non tracciate dal bot (prima del bot, testo, ecc.)
   total: number        // totale globale all'istante refT
   lb: LbEntry[]
+  milestoneSnipers: Record<number, number>
   name: (u: number) => string
   flag: (u: number) => string
   sumDay: (day: number) => number
@@ -33,10 +34,17 @@ export function buildView(data: Dataset, refT: number, isLive: boolean): View {
   const perDay = new Map<number, number>()
   for (const r of rows) perDay.set(r.day, (perDay.get(r.day) || 0) + r.beers)
 
+  const milestoneSnipers: Record<number, number> = {}
+  for (const [value, name] of Object.entries(data.milestoneSnipers)) {
+    const i = data.users.findIndex(u => u.name === name)
+    if (i >= 0) milestoneSnipers[+value] = i
+  }
+
   return {
     data, rows, refT, refDay: dayOf(refT), isLive,
     ghost, total: ghost + upTo,
     lb: leaderboard(rows, data.users, prevRows),
+    milestoneSnipers,
     name: u => data.users[u]?.name ?? '?',
     flag: u => data.users[u]?.flag ?? '🏴‍☠️',
     sumDay: day => perDay.get(day) || 0,
