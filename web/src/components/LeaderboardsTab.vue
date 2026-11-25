@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import type { View } from '../lib/view'
 import { dayStart } from '../lib/view'
-import { leaderboard, streaks, binges, milestones, wallOfShame, nerdStats, deathRow } from '../lib/stats'
+import { leaderboard, streaks, binges, milestones, nerdStats, deathRow } from '../lib/stats'
 import { lbCols, type Col } from '../lib/columns'
 import { fmtDay, fmtDateTime, weekdayOf, monthKey, MIN_PER_DAY } from '../lib/time'
 import { CONFIG } from '../config'
@@ -11,10 +11,11 @@ import DataTable from './DataTable.vue'
 const props = defineProps<{ v: View }>()
 const emit = defineEmits<{ player: [u: number] }>()
 
-type Period = 'all' | 'month' | 'week' | 'fame' | 'shame' | 'nerd' | 'death'
+type Period = 'all' | 'month' | 'week' | 'fame' | 'nerd' | 'death'
 const period = ref<Period>('all')
 const q = ref('')
 const deathMonths = ref(3)
+const deathShowAll = ref(false)
 
 const board = computed(() => {
   const { rows, refDay, refT } = props.v
@@ -57,13 +58,6 @@ const msCols: Col[] = [
   { key: 'name', label: 'Sniper' },
   { key: 't', label: 'When', fmt: (t: number) => fmtDateTime(t) },
 ]
-const shame = computed(() => wallOfShame(props.v.rows, props.v.refDay, props.v.data.users))
-const shameCols: Col[] = [
-  { key: 'name', label: 'Drinker', fmt: (n: string, row: any) => `${row.flag}  ${n}` },
-  { key: 'daysMIA', label: 'Days MIA', num: true },
-  { key: 'uploads', label: 'Uploads', num: true },
-  { key: 'lastSeen', label: 'Last seen' },
-]
 const nerd = computed(() => nerdStats(props.v.rows, props.v.data.users))
 const nerdCols: Col[] = [
   { key: 'name', label: 'Drinker', fmt: (n: string, row: any) => `${row.flag}  ${n}` },
@@ -88,7 +82,6 @@ const deathCols: Col[] = [
     <button :class="{ active: period === 'month' }" @click="period = 'month'">🗓️ This month</button>
     <button :class="{ active: period === 'week' }" @click="period = 'week'">📅 This week</button>
     <button :class="{ active: period === 'fame' }" @click="period = 'fame'">🏛️ Hall of Fame</button>
-    <button :class="{ active: period === 'shame' }" @click="period = 'shame'">🚨 Wall of Shame</button>
     <button :class="{ active: period === 'nerd' }" @click="period = 'nerd'">🤓 Nerd Stats</button>
     <button :class="{ active: period === 'death' }" @click="period = 'death'">💀 Death Row</button>
   </div>
@@ -97,13 +90,6 @@ const deathCols: Col[] = [
     <input v-model="q" type="search" placeholder="🔎 Search a drinker or a country…" style="margin-bottom:12px" />
     <DataTable :cols="lbCols(true)" :rows="filtered" clickable sortable :pageSize="25" @select="r => emit('player', r.u)" />
     <p class="small muted">{{ board.length.toLocaleString('en-US') }} drinkers · photo = 1 point, down video = 5 points. ↑/↓ = rank change vs the previous period.</p>
-  </div>
-
-  <div v-else-if="period === 'shame'" class="card">
-    <h3>🚨 Wall of Shame</h3>
-    <p class="small muted">Regulars (10+ uploads) who have gone quiet for more than 2 days. We're worried. 🥺</p>
-    <div v-if="shame.length"><DataTable :cols="shameCols" :rows="shame" :pageSize="10" /></div>
-    <p v-else class="small">Everyone is drinking! Great job! 🍻</p>
   </div>
 
   <div v-else-if="period === 'nerd'" class="card">
@@ -122,10 +108,15 @@ const deathCols: Col[] = [
     </p>
     <p class="small muted" v-else>No membership snapshot yet: this list is built from uploads only.</p>
     <p v-if="!death.candidates.length" class="small">Nobody on death row. The group is alive and drinking! 🍻</p>
-    <DataTable v-else :cols="deathCols" :rows="death.candidates" :pageSize="10" />
+    <template v-else>
+      <button class="btn sm" style="margin-bottom:8px" @click="deathShowAll = !deathShowAll">
+        {{ deathShowAll ? 'Show 10 at a time' : `Show all ${death.candidates.length.toLocaleString('en-US')}` }}
+      </button>
+      <DataTable :cols="deathCols" :rows="death.candidates" :pageSize="10" sortable :showAll="deathShowAll" />
+    </template>
     <details v-if="death.gone.length" style="margin-top:12px">
       <summary class="small">👻 Already gone: {{ death.gone.length }} former drinkers no longer in the group</summary>
-      <DataTable :cols="deathCols" :rows="death.gone" :pageSize="10" />
+      <DataTable :cols="deathCols" :rows="death.gone" :pageSize="10" sortable :showAll="deathShowAll" />
     </details>
   </div>
 

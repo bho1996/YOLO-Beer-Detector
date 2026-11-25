@@ -88,12 +88,19 @@ const monthOpt = computed(() => {
 })
 
 const communityOpt = computed(() => {
-  const c = communityGrowth(props.v.rows)
+  const c = communityGrowth(props.v.rows, props.v.data.members, props.v.refDay)
   return {
     ...base,
     xAxis: { type: 'category', data: c.map(x => isoDay(x[0])), ...axisStyle, splitLine: { show: false } },
-    yAxis: { type: 'value', ...axisStyle },
-    series: [{ name: 'Drinkers', type: 'line', step: 'end', symbol: 'none', data: c.map(x => x[1]), lineStyle: { color: '#5eb3ff', width: 2 } }],
+    yAxis: { type: 'value', ...axisStyle, max: (v: { max: number }) => Math.max(v.max, 1500) },
+    series: [{ name: 'Drinkers', type: 'line', step: 'end', symbol: 'none', data: c.map(x => x[1]), lineStyle: { color: '#5eb3ff', width: 2 },
+      markLine: {
+        silent: true, symbol: 'none',
+        data: [{ yAxis: 1500 }],
+        lineStyle: { color: '#ff6b6b', type: 'dashed', width: 2 },
+        label: { formatter: 'WhatsApp limit · 1,500', color: '#ff9d9d', position: 'insideEndTop' },
+      },
+    }],
   }
 })
 

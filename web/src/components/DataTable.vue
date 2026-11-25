@@ -8,13 +8,15 @@ const props = withDefaults(defineProps<{
   clickable?: boolean
   pageSize?: number
   sortable?: boolean
-}>(), { clickable: false, pageSize: 15, sortable: false })
+  showAll?: boolean
+}>(), { clickable: false, pageSize: 15, sortable: false, showAll: false })
 const emit = defineEmits<{ select: [row: any] }>()
 
 const sortKey = ref<string | null>(null)
 const sortDir = ref<1 | -1>(-1)
-const shown = ref(props.pageSize)
-watch(() => props.rows, () => { shown.value = props.pageSize })
+const shown = computed(() => props.showAll ? sorted.value.length : shownRaw.value)
+const shownRaw = ref(props.pageSize)
+watch(() => props.rows, () => { shownRaw.value = props.pageSize })
 
 const sorted = computed(() => {
   if (!sortKey.value) return props.rows
@@ -53,7 +55,7 @@ const cell = (c: Col, r: any) => {
       </tbody>
     </table>
   </div>
-  <div v-if="sorted.length > shown" class="mt" style="text-align:center">
-    <button class="btn sm" @click="shown += pageSize * 2">Show more ({{ (sorted.length - shown).toLocaleString('en-US') }} left)</button>
+  <div v-if="!showAll && sorted.length > shownRaw" class="mt" style="text-align:center">
+    <button class="btn sm" @click="shownRaw += pageSize * 2">Show more ({{ (sorted.length - shownRaw).toLocaleString('en-US') }} left)</button>
   </div>
 </template>
