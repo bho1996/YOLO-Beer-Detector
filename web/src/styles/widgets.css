@@ -24,6 +24,7 @@
 .bar > div { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--amber2), var(--amber)); transition: width .8s ease; }
 .bar-caption { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-top: 6px; gap: 10px; }
 .mission { padding-bottom: 12px; }
+.kpi-row { margin-top: 18px; }
 .mission-title { font-weight: 700; margin-bottom: 12px; }
 .mission .bar-caption { margin-top: 8px; margin-bottom: 0; }
 .mission .bar-caption span:last-child { text-align: right; }

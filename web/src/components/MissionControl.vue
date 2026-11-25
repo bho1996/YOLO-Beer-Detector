@@ -83,7 +83,7 @@ const status = computed(() => {
         </div>
       </div>
     </div>
-    <div class="grid g5">
+    <div class="grid g5 kpi-row">
       <Kpi label="🍺 Today" :value="fmt(k.today)" :delta="k.today - k.ySame" deltaLabel="vs yesterday at this time" />
       <Kpi label="📅 This week" :value="fmt(k.week)" :delta="k.week - k.lastWeekSame" deltaLabel="vs last week so far" />
       <Kpi label="🙋 Drinkers today" :value="fmt(k.drinkers)" />
