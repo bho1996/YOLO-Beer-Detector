@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useDataset } from './lib/data'
 import { buildView } from './lib/view'
 import { romeNow, dayOf, fmtDay, isoDay, dayFromIso, MIN_PER_DAY } from './lib/time'
@@ -20,7 +20,12 @@ const { data, error, lastCheck } = useDataset()
 // "adesso" (ora di Roma) che avanza da solo
 const now = ref(romeNow())
 let timer: number | undefined
-onMounted(() => { timer = window.setInterval(() => (now.value = romeNow()), 30_000) })
+const tabsNav = ref<HTMLElement | null>(null)
+async function focusActiveTab() {
+  await nextTick()
+  tabsNav.value?.querySelector<HTMLElement>('.active')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' })
+}
+onMounted(() => { timer = window.setInterval(() => (now.value = romeNow()), 30_000); focusActiveTab() })
 onUnmounted(() => clearInterval(timer))
 
 // ---------- stato da/verso URL (link condivisibili) ----------
@@ -46,6 +51,7 @@ watch([tab, playerName, pinnedDay], () => {
   const qs = p.toString()
   history.replaceState(null, '', qs ? `?${qs}` : location.pathname)
 })
+watch(tab, focusActiveTab)
 
 // ---------- time machine ----------
 const firstDay = computed(() => data.value?.rows.length ? data.value.rows[0].day : dayOf(now.value))
@@ -58,6 +64,7 @@ const isLive = computed(() => pinnedDay.value == null)
 const refT = computed(() => isLive.value ? now.value : pinnedDay.value! * MIN_PER_DAY + MIN_PER_DAY - 1)
 
 const view = computed(() => data.value ? buildView(data.value, refT.value, isLive.value) : null)
+watch(view, focusActiveTab)
 
 const playerU = computed(() => {
   if (!data.value || !playerName.value) return null
@@ -117,9 +124,10 @@ const updatedAgo = computed(() => {
       </section>
 
       <section id="tabs" class="section">
-        <nav class="tabs">
+        <nav class="tabs" ref="tabsNav">
           <button v-for="t in TABS" :key="t.id" :class="{ active: tab === t.id }" @click="tab = t.id">{{ t.label }}</button>
         </nav>
+        <div class="swipe-hint">⇆ swipe sideways for more sections</div>
         <LeaderboardsTab v-if="tab === 'leaderboards'" :v="view" @player="openPlayer" />
         <StatsTab v-else-if="tab === 'stats'" :v="view" />
         <NationsTab v-else-if="tab === 'nations'" :v="view" />

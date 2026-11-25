@@ -34,6 +34,9 @@ tr.clickable:hover td { background: rgba(255, 176, 46, .07); cursor: pointer; }
 .thumbs button.active { border-color: var(--amber); }
 .thumbs img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
 .thumbs small { display: block; font-size: 11px; color: var(--muted); padding: 3px 0; }
+.potd-gallery { margin-top: 12px; }
+.potd-gallery > summary { cursor: pointer; padding: 8px 0; color: var(--muted); font-weight: 700; }
+.potd-gallery[open] > summary { color: var(--amber); }
 
 .badges { display: flex; flex-wrap: wrap; gap: 8px; }
 .badge { padding: 6px 10px; border-radius: 999px; background: rgba(255, 176, 46, .1); border: 1px solid var(--line); font-size: 13px; font-weight: 600; }

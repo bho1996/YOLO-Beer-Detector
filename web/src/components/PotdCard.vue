@@ -33,12 +33,15 @@ const label = computed(() => {
         🏅 <b style="color:var(--text)">{{ current.user }}</b> · {{ current.time }} ·
         picked from {{ current.candidates.toLocaleString('en-US') }} approved beers
       </p>
-      <div v-if="available.length > 1" class="thumbs">
-        <button v-for="(p, i) in available" :key="p.day" :class="{ active: i === selected }" @click="selected = i">
-          <img :src="p.image" :alt="fmtDay(p.day)" loading="lazy" />
-          <small>{{ fmtDay(p.day, false) }}</small>
-        </button>
-      </div>
+      <details v-if="available.length > 1" class="potd-gallery">
+        <summary>📂 Other pictures ({{ (available.length - 1).toLocaleString('en-US') }})</summary>
+        <div class="thumbs">
+          <button v-for="(p, i) in available" :key="p.day" :class="{ active: i === selected }" @click="selected = i">
+            <img :src="p.image" :alt="fmtDay(p.day)" loading="lazy" />
+            <small>{{ fmtDay(p.day, false) }}</small>
+          </button>
+        </div>
+      </details>
     </template>
     <div v-else class="potd-empty">
       <div class="big">🍺</div>
