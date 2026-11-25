@@ -554,6 +554,7 @@ async function mettiInAttesa(nome_file, data_ora, utente, testo, motivo) {
 // ==========================================
 const client = new Client({
     authStrategy: new LocalAuth(),
+    authTimeoutMs: 180000,
     puppeteer: {
         headless: true,
         executablePath: '/usr/bin/chromium',
