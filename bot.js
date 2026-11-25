@@ -4,7 +4,9 @@ const fs = require('fs');
 const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
 const { execFile, exec } = require('child_process');
+const { promisify } = require('util');
 const crypto = require('crypto');
+const execFileAsync = promisify(execFile);
 
 // --- CONFIGURAZIONI ---
 const NOME_GRUPPO_BERSAGLIO = "1 million beers 🍻";
@@ -56,6 +58,44 @@ function registraMedia(nome_file) {
         if (!mediaIndex.has(size)) mediaIndex.set(size, []);
         if (!mediaIndex.get(size).includes(nome_file)) mediaIndex.get(size).push(nome_file);
     } catch (e) { /* ignore */ }
+}
+
+const HASH_PY = `
+from PIL import Image
+import sys
+im = Image.open(sys.argv[1]).convert('L').resize((17, 16))
+px = list(im.getdata())
+bits = 0
+for y in range(16):
+    for x in range(16):
+        bits = (bits << 1) | (1 if px[y * 17 + x] > px[y * 17 + x + 1] else 0)
+print(format(bits, '016x'))
+`;
+const perceptualHashes = new Set();
+const D_HASH_TOLLERANZA = 3;
+
+async function dHash(percorso) {
+    const { stdout } = await execFileAsync(PYTHON_PATH, ['-c', HASH_PY, percorso], { timeout: 15000 });
+    return stdout.trim();
+}
+
+function distanzaHash(a, b) {
+    let x = BigInt('0x' + a) ^ BigInt('0x' + b), n = 0;
+    while (x) { n += Number(x & 1n); x >>= 1n; }
+    return n;
+}
+
+function eSimile(h) {
+    for (const altro of perceptualHashes) {
+        if (distanzaHash(h, altro) <= D_HASH_TOLLERANZA) return true;
+    }
+    return false;
+}
+
+async function caricaHashPerceptuali() {
+    const righe = await db.all('SELECT hash FROM media_hash');
+    for (const r of righe) perceptualHashes.add(r.hash);
+    console.log(`🔎 ${perceptualHashes.size} image fingerprints loaded`);
 }
 
 if (!fs.existsSync(CARTELLA_MEDIA)) {
@@ -388,6 +428,11 @@ async function initDatabase() {
         ultima_vista TEXT NOT NULL,
         admin INTEGER NOT NULL DEFAULT 0
     )`);
+    await db.run(`CREATE TABLE IF NOT EXISTS media_hash (
+        hash TEXT PRIMARY KEY,
+        nome_file TEXT NOT NULL
+    )`);
+    await caricaHashPerceptuali();
     console.log('📦 Database SQLite pronto (WAL mode)');
 }
 
@@ -764,11 +809,17 @@ if (chat.name !== NOME_GRUPPO_BERSAGLIO) {
                 console.log(`📎 Salvato: ${nome_file}`);
 
                 const hashMedia = crypto.createHash('md5').update(media.data, 'base64').digest('hex');
-                const duplicato = eDuplicato(nome_file, hashMedia);
+                let hashP = null;
+                try { hashP = await dHash(percorso_file); } catch (e) { /* video o file non decodificabile */ }
+                const duplicato = eDuplicato(nome_file, hashMedia) || (hashP !== null && eSimile(hashP));
                 if (duplicato) {
                     console.log(`♻️ Contenuto già visto: ${nome_file} → 0 punti (nessun +1 al totale).`);
                     await inserisciNelDB(data_ora, autore, nome_file, 0, tipo_file);
                     return;
+                }
+                if (hashP !== null) {
+                    perceptualHashes.add(hashP);
+                    await db.run('INSERT OR IGNORE INTO media_hash(hash, nome_file) VALUES(?, ?)', [hashP, nome_file]);
                 }
                 registraMedia(nome_file);
 
