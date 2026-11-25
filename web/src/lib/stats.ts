@@ -100,14 +100,32 @@ export function monthlyTotals(rows: Row[]): [string, number][] {
   return [...m.entries()]
 }
 
-export function communityGrowth(rows: Row[]): [number, number][] {
-  const seen = new Set<number>(), out: [number, number][] = []
-  for (const r of rows) {
-    if (!seen.has(r.u)) {
-      seen.add(r.u)
-      if (out.length && out[out.length - 1][0] === r.day) out[out.length - 1][1] = seen.size
-      else out.push([r.day, seen.size])
+export function communityGrowth(rows: Row[], members: Member[] = [], refDay = 0): [number, number][] {
+  if (!members.length) {
+    const seen = new Set<number>(), out: [number, number][] = []
+    for (const r of rows) {
+      if (!seen.has(r.u)) {
+        seen.add(r.u)
+        if (out.length && out[out.length - 1][0] === r.day) out[out.length - 1][1] = seen.size
+        else out.push([r.day, seen.size])
+      }
     }
+    return out
+  }
+  const changes = new Map<number, number>()
+  for (const m of members) {
+    const first = dayFromIso(m.first), last = dayFromIso(m.last)
+    changes.set(first, (changes.get(first) || 0) + 1)
+    changes.set(last + 1, (changes.get(last + 1) || 0) - 1)
+  }
+  const days = [...changes.keys()]
+  const start = Math.min(...days)
+  const end = refDay > 0 ? refDay : Math.max(...days)
+  const out: [number, number][] = []
+  let count = 0
+  for (let d = start; d <= end; d++) {
+    count += changes.get(d) || 0
+    out.push([d, count])
   }
   return out
 }
@@ -121,20 +139,6 @@ export function binges(rows: Row[], n = 10) {
     m.set(k, e)
   }
   return [...m.values()].sort((a, b) => b.score - a.score).slice(0, n)
-}
-
-export function wallOfShame(rows: Row[], refDay: number, users: User[], n = 10) {
-  const m = new Map<number, { u: number; last: number; uploads: number }>()
-  for (const r of rows) {
-    const e = m.get(r.u) || { u: r.u, last: r.day, uploads: 0 }
-    e.uploads++
-    if (r.day > e.last) e.last = r.day
-    m.set(r.u, e)
-  }
-  return [...m.values()]
-    .filter(e => e.uploads >= 10 && refDay - e.last > 2)
-    .sort((a, b) => a.last - b.last || b.uploads - a.uploads).slice(0, n)
-    .map(e => ({ ...e, name: users[e.u]?.name ?? '?', flag: users[e.u]?.flag ?? '🍺', daysMIA: refDay - e.last, lastSeen: fmtDay(e.last) }))
 }
 
 export function nerdStats(rows: Row[], users: User[], n = 10) {
