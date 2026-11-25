@@ -559,6 +559,7 @@ const client = new Client({
         headless: true,
         executablePath: '/usr/bin/chromium',
         ignoreHTTPSErrors: true,
+        acceptInsecureCerts: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--ignore-certificate-errors']
     }
 });
