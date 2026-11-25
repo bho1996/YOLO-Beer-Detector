@@ -3,7 +3,8 @@ import { computed } from 'vue'
 import type { View } from '../lib/view'
 import { dailySeries, rollingAvg, hourWeekHeatmap, monthlyTotals, communityGrowth, funFacts } from '../lib/stats'
 import { base, axisStyle, AMBER, AMBER2, HEAT } from '../lib/charts'
-import { fmt, isoDay, WEEKDAYS } from '../lib/time'
+import { fmt, isoDay, WEEKDAYS, weekdayOf } from '../lib/time'
+import { dayStart } from '../lib/view'
 import { CONFIG } from '../config'
 import EChart from './EChart.vue'
 
@@ -97,6 +98,23 @@ const communityOpt = computed(() => {
 })
 
 const facts = computed(() => funFacts(props.v.total, CONFIG.pintPriceEur))
+
+const community = computed(() => {
+  const rows = props.v.rows
+  const week0 = dayStart(props.v.refDay - weekdayOf(props.v.refDay))
+  const first = new Map<number, number>()
+  for (const r of rows) if (!first.has(r.u)) first.set(r.u, r.day)
+  const photos = rows.filter(r => !r.video)
+  const scores = props.v.lb.map(e => e.score).sort((a, b) => b - a)
+  const topN = Math.max(Math.floor(scores.length / 10), 1)
+  const topShare = scores.slice(0, topN).reduce((a, b) => a + b, 0) / Math.max(scores.reduce((a, b) => a + b, 0), 1) * 100
+  return {
+    drinkers: new Set(rows.map(r => r.u)).size,
+    newWeek: [...first.values()].filter(d => d >= week0).length,
+    rejected: photos.length ? photos.filter(r => r.punti === 0).length / photos.length * 100 : 0,
+    topShare,
+  }
+})
 </script>
 
 <template>
@@ -110,6 +128,12 @@ const facts = computed(() => funFacts(props.v.total, CONFIG.pintPriceEur))
     <div class="grid g2">
       <div class="card"><h3>🕐 When does the group drink?</h3><EChart :option="hourOpt" height="280px" /></div>
       <div class="card"><h3>👥 Community growth</h3><EChart :option="communityOpt" height="280px" /></div>
+    </div>
+    <div class="grid g4">
+      <div class="card fact"><div class="emoji">👥</div><div class="value">{{ fmt(community.drinkers) }}</div><div class="small muted">drinkers so far</div></div>
+      <div class="card fact"><div class="emoji">🆕</div><div class="value">{{ fmt(community.newWeek) }}</div><div class="small muted">new this week</div></div>
+      <div class="card fact"><div class="emoji">🤖</div><div class="value">{{ community.rejected.toFixed(1) }}%</div><div class="small muted">photos rejected by AI</div></div>
+      <div class="card fact"><div class="emoji">📊</div><div class="value">{{ community.topShare.toFixed(0) }}%</div><div class="small muted">points held by the top 10%</div></div>
     </div>
     <div class="grid g4">
       <div class="card fact"><div class="emoji">🛁</div><div class="value">{{ fmt(facts.bathtubs) }}</div><div class="small muted">bathtubs of beer ({{ fmt(facts.liters) }} L)</div></div>

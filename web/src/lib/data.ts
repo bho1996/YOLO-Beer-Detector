@@ -15,6 +15,7 @@ export interface Row {
   file: string
 }
 export interface Potd { image: string; user: string; time: string; candidates: number }
+export interface Member { name: string; first: string; last: string; admin: number }
 export interface Report {
   rows: number; ts_fixed: number; swap_fixed: number; unparsable_dates: number
   aliases: Record<string, string>; alias_rows: number; whitespace_fixed: number
@@ -29,6 +30,8 @@ export interface Dataset {
   rows: Row[]           // ordinate per t
   potd: Record<string, Potd>
   milestoneSnipers: Record<string, string>
+  members: Member[]
+  memberSnapshot: string
   report: Report
 }
 
@@ -36,6 +39,8 @@ interface RawData {
   generated_at: number; db_updated_at: number; official_total: number
   users: User[]; potd: Record<string, Potd>; report: Report
   milestone_snipers?: Record<string, string>
+  members?: Member[]
+  member_snapshot?: string
   rows: { id: number[]; t: number[]; u: number[]; v: number[]; b: number[]; s: number[]; p: number[]; f: string[] }
 }
 
@@ -50,6 +55,7 @@ function parse(raw: RawData): Dataset {
     generatedAt: raw.generated_at, dbUpdatedAt: raw.db_updated_at, officialTotal: raw.official_total,
     users: raw.users, rows, potd: raw.potd, report: raw.report,
     milestoneSnipers: raw.milestone_snipers ?? {},
+    members: raw.members ?? [], memberSnapshot: raw.member_snapshot ?? '',
   }
 }
 
