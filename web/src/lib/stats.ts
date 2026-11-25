@@ -173,7 +173,7 @@ export function deathRow(rows: Row[], members: Member[], snapshot: string, refDa
       seenSince: member?.first ?? '?', admin: !!member?.admin,
     }
     if (status === 'Left' && a) gone.push(entry)
-    else if (inactive || silent) candidates.push(entry)
+    else if (status === 'In group' && (inactive || silent)) candidates.push(entry)
   }
 
   for (const [u] of activity) {
