@@ -41,15 +41,13 @@ function indicizzaMedia() {
     }
 }
 
-function eDuplicato(nome_file, hash) {
-    try {
-        const size = fs.statSync(`${CARTELLA_MEDIA}/${nome_file}`).size;
-        for (const altro of mediaIndex.get(size) || []) {
-            if (altro === nome_file) continue;
-            if (hashFile(`${CARTELLA_MEDIA}/${altro}`) === hash) return true;
-        }
-    } catch (e) { /* file non leggibile */ }
-    return false;
+function eDuplicatoEsatto(size, hash) {
+    for (const nome of mediaIndex.get(size) || []) {
+        try {
+            if (hashFile(`${CARTELLA_MEDIA}/${nome}`) === hash) return nome;
+        } catch (e) { /* file sparito */ }
+    }
+    return null;
 }
 
 function registraMedia(nome_file) {
@@ -71,8 +69,9 @@ for y in range(16):
         bits = (bits << 1) | (1 if px[y * 17 + x] > px[y * 17 + x + 1] else 0)
 print(format(bits, '016x'))
 `;
-const perceptualHashes = new Set();
+const perceptualHashes = new Map();         // dHash -> { file, ts }
 const D_HASH_TOLLERANZA = 3;
+const DUPLICATO_FINESTRA_MS = 60 * 1000;  // la stessa foto entro 1 minuto non viene contata
 
 async function dHash(percorso) {
     const { stdout } = await execFileAsync(PYTHON_PATH, ['-c', HASH_PY, percorso], { timeout: 15000 });
@@ -85,16 +84,20 @@ function distanzaHash(a, b) {
     return n;
 }
 
-function eSimile(h) {
-    for (const altro of perceptualHashes) {
-        if (distanzaHash(h, altro) <= D_HASH_TOLLERANZA) return true;
+function eSimile(h, secondi) {
+    for (const [hash, info] of perceptualHashes) {
+        if (distanzaHash(h, hash) <= D_HASH_TOLLERANZA &&
+            (secondi - info.ts) * 1000 < DUPLICATO_FINESTRA_MS) return true;
     }
     return false;
 }
 
 async function caricaHashPerceptuali() {
-    const righe = await db.all('SELECT hash FROM media_hash');
-    for (const r of righe) perceptualHashes.add(r.hash);
+    const righe = await db.all('SELECT hash, nome_file FROM media_hash');
+    for (const r of righe) {
+        const m = /^WA_(\d+)/.exec(String(r.nome_file || ''));
+        perceptualHashes.set(r.hash, { file: r.nome_file, ts: m ? Number(m[1]) : 0 });
+    }
     console.log(`🔎 ${perceptualHashes.size} image fingerprints loaded`);
 }
 
@@ -805,21 +808,26 @@ if (chat.name !== NOME_GRUPPO_BERSAGLIO) {
             if (tipo_file !== "") {
                 let nome_file = `WA_${msg.timestamp}.${estensione}`;
                 let percorso_file = `${CARTELLA_MEDIA}/${nome_file}`;
+                const buffer = Buffer.from(media.data, 'base64');
+                const md5 = crypto.createHash('md5').update(buffer).digest('hex');
+                const identica = eDuplicatoEsatto(buffer.length, md5);
+                if (identica) {
+                    console.log(`♻️ Identica a ${identica}: ${nome_file} NON salvata.`);
+                    return;
+                }
                 fs.writeFileSync(percorso_file, media.data, 'base64');
                 console.log(`📎 Salvato: ${nome_file}`);
 
-                const hashMedia = crypto.createHash('md5').update(media.data, 'base64').digest('hex');
                 let hashP = null;
                 try { hashP = await dHash(percorso_file); } catch (e) { /* video o file non decodificabile */ }
-                const duplicato = eDuplicato(nome_file, hashMedia) || (hashP !== null && eSimile(hashP));
-                if (duplicato) {
-                    console.log(`♻️ Contenuto già visto: ${nome_file} → 0 punti (nessun +1 al totale).`);
-                    await inserisciNelDB(data_ora, autore, nome_file, 0, tipo_file);
+                if (hashP !== null && eSimile(hashP, msg.timestamp)) {
+                    fs.unlinkSync(percorso_file);
+                    console.log(`♻️ Simile a una foto dell'ultimo minuto: ${nome_file} NON salvata.`);
                     return;
                 }
                 if (hashP !== null) {
-                    perceptualHashes.add(hashP);
-                    await db.run('INSERT OR IGNORE INTO media_hash(hash, nome_file) VALUES(?, ?)', [hashP, nome_file]);
+                    perceptualHashes.set(hashP, { file: nome_file, ts: msg.timestamp });
+                    await db.run('INSERT OR REPLACE INTO media_hash(hash, nome_file) VALUES(?, ?)', [hashP, nome_file]);
                 }
                 registraMedia(nome_file);
 
