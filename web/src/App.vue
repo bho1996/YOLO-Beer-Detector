@@ -127,7 +127,6 @@ const updatedAgo = computed(() => {
         <nav class="tabs" ref="tabsNav">
           <button v-for="t in TABS" :key="t.id" :class="{ active: tab === t.id }" @click="tab = t.id">{{ t.label }}</button>
         </nav>
-        <div class="swipe-hint">⇆ swipe sideways for more sections</div>
         <LeaderboardsTab v-if="tab === 'leaderboards'" :v="view" @player="openPlayer" />
         <StatsTab v-else-if="tab === 'stats'" :v="view" />
         <NationsTab v-else-if="tab === 'nations'" :v="view" />

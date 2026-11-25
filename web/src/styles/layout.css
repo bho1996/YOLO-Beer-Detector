@@ -58,4 +58,5 @@
   th, td { padding: 7px 8px; font-size: 13px; }
   .potd-img { max-height: 280px; }
   .thumbs { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); }
+  .desktop-only { display: none; }
 }

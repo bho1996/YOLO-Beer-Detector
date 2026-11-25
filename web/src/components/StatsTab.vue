@@ -131,7 +131,7 @@ const community = computed(() => {
       <div class="card"><h3>🚀 Road to 1M</h3><EChart :option="cumOpt" /></div>
       <div class="card"><h3>🗓️ Beers per month</h3><EChart :option="monthOpt" /></div>
     </div>
-    <div class="card"><h3>🟧 The beer calendar</h3><EChart :option="calOpt" height="170px" /></div>
+    <div class="card desktop-only"><h3>🟧 The beer calendar</h3><EChart :option="calOpt" height="170px" /></div>
     <div class="grid g2">
       <div class="card"><h3>🕐 When does the group drink?</h3><EChart :option="hourOpt" height="280px" /></div>
       <div class="card"><h3>👥 Community growth</h3><EChart :option="communityOpt" height="280px" /></div>
