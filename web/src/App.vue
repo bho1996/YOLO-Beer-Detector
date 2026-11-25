@@ -23,7 +23,10 @@ let timer: number | undefined
 const tabsNav = ref<HTMLElement | null>(null)
 async function focusActiveTab() {
   await nextTick()
-  tabsNav.value?.querySelector<HTMLElement>('.active')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' })
+  const nav = tabsNav.value
+  const active = nav?.querySelector<HTMLElement>('.active')
+  if (!nav || !active) return
+  nav.scrollTo({ left: active.offsetLeft - nav.clientWidth / 2 + active.offsetWidth / 2, behavior: 'smooth' })
 }
 onMounted(() => { timer = window.setInterval(() => (now.value = romeNow()), 30_000); focusActiveTab() })
 onUnmounted(() => clearInterval(timer))
