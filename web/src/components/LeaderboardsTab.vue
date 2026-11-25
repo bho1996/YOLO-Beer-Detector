@@ -91,7 +91,7 @@ const deathCols: Col[] = [
       <input v-model.number="deathMonths" type="range" min="1" max="12" style="vertical-align:middle;margin-left:8px" />
     </label>
     <p class="small muted" v-if="death.known">
-      Membership from the bot snapshot of <b>{{ v.data.memberSnapshot }}</b> ({{ death.inGroup }} members). “Unknown” = posted under a label the snapshot can't match.
+      Membership from the bot snapshot of <b>{{ v.data.memberSnapshot }}</b> ({{ death.inGroup }} members). Only people confirmed in the group are listed.
     </p>
     <p class="small muted" v-else>No membership snapshot yet: this list is built from uploads only.</p>
     <p v-if="!death.candidates.length" class="small">Nobody on death row. The group is alive and drinking! 🍻</p>
