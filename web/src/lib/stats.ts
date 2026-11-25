@@ -1,5 +1,5 @@
-import type { Row, User } from './data'
-import { dayOf, hourOf, weekdayOf, fmtDay, fmtDateTime, monthKey, MIN_PER_DAY } from './time'
+import type { Row, User, Member } from './data'
+import { dayOf, hourOf, weekdayOf, fmtDay, fmtDateTime, monthKey, dayFromIso, MIN_PER_DAY } from './time'
 
 export interface LbEntry {
   rank: number; u: number; name: string; flag: string; nation: string
@@ -121,6 +121,77 @@ export function binges(rows: Row[], n = 10) {
     m.set(k, e)
   }
   return [...m.values()].sort((a, b) => b.score - a.score).slice(0, n)
+}
+
+export function wallOfShame(rows: Row[], refDay: number, users: User[], n = 10) {
+  const m = new Map<number, { u: number; last: number; uploads: number }>()
+  for (const r of rows) {
+    const e = m.get(r.u) || { u: r.u, last: r.day, uploads: 0 }
+    e.uploads++
+    if (r.day > e.last) e.last = r.day
+    m.set(r.u, e)
+  }
+  return [...m.values()]
+    .filter(e => e.uploads >= 10 && refDay - e.last > 2)
+    .sort((a, b) => a.last - b.last || b.uploads - a.uploads).slice(0, n)
+    .map(e => ({ ...e, name: users[e.u]?.name ?? '?', flag: users[e.u]?.flag ?? '🍺', daysMIA: refDay - e.last, lastSeen: fmtDay(e.last) }))
+}
+
+export function nerdStats(rows: Row[], users: User[], n = 10) {
+  const m = new Map<number, { u: number; beers: number; uploads: number }>()
+  for (const r of rows) {
+    const e = m.get(r.u) || { u: r.u, beers: 0, uploads: 0 }
+    e.beers += r.beers; e.uploads++
+    m.set(r.u, e)
+  }
+  return [...m.values()].filter(e => e.uploads >= 10)
+    .map(e => ({ ...e, name: users[e.u]?.name ?? '?', flag: users[e.u]?.flag ?? '🍺',
+                 avg: Math.round(e.beers / e.uploads * 100) / 100 }))
+    .sort((a, b) => b.avg - a.avg).slice(0, n)
+}
+
+export function deathRow(rows: Row[], members: Member[], snapshot: string, refDay: number, months: number, users: User[]) {
+  const cutoff = refDay - Math.round(months * 30.4)
+  const activity = new Map<number, { last: number | null; uploads: number }>()
+  for (const r of rows) {
+    const e = activity.get(r.u) || { last: null, uploads: 0 }
+    e.uploads++
+    if (e.last == null || r.day > e.last) e.last = r.day
+    activity.set(r.u, e)
+  }
+  const idx = new Map(users.map((u, i) => [u.name, i]))
+  const memberByName = new Map(members.map(m => [m.name, m]))
+  const known = !!snapshot && members.length > 0
+  const nameOf = (u: number) => users[u]?.name ?? '?'
+  const flagOf = (u: number) => users[u]?.flag ?? '🍺'
+  const candidates: any[] = []
+  const gone: any[] = []
+
+  function consider(u: number, name: string, member?: Member) {
+    const a = activity.get(u)
+    const last = a?.last ?? null
+    const inGroup = known && !!member ? member.last === snapshot : null
+    const status = inGroup === null ? 'Unknown' : inGroup ? 'In group' : 'Left'
+    const firstDay = member ? dayFromIso(member.first) : null
+    const inactive = last !== null && last < cutoff
+    const silent = last === null && firstDay !== null && firstDay < cutoff
+    const entry = {
+      u, name, flag: flagOf(u), status, uploads: a?.uploads ?? 0,
+      monthsSilent: last === null ? null : Math.round((refDay - last) / 30.4 * 10) / 10,
+      lastUpload: last === null ? 'never' : fmtDay(last),
+      seenSince: member?.first ?? '?', admin: !!member?.admin,
+    }
+    if (status === 'Left' && a) gone.push(entry)
+    else if (inactive || silent) candidates.push(entry)
+  }
+
+  for (const [u] of activity) {
+    if (memberByName.has(nameOf(u))) continue
+    consider(u, nameOf(u))
+  }
+  for (const m of members) consider(idx.get(m.name) ?? -1, m.name, m)
+  candidates.sort((a, b) => (b.monthsSilent ?? Infinity) - (a.monthsSilent ?? Infinity) || b.uploads - a.uploads)
+  return { candidates, gone, known, inGroup: members.filter(m => m.last === snapshot).length }
 }
 
 export function badges(rows: Row[]): string[] {

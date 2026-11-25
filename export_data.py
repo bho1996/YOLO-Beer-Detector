@@ -33,6 +33,12 @@ def main():
     raw = pd.read_sql_query("SELECT * FROM log_birre", conn)
     row = conn.execute("SELECT valore FROM config WHERE chiave='OFFICIAL_TOTAL'").fetchone()
     override = conn.execute("SELECT valore FROM config WHERE chiave='SNIPER_65000'").fetchone()
+    snapshot = conn.execute("SELECT valore FROM config WHERE chiave='MEMBRI_SNAPSHOT'").fetchone()
+    try:
+        members_raw = pd.read_sql_query(
+            "SELECT utente, prima_vista, ultima_vista, admin FROM membri_gruppo", conn)
+    except Exception:
+        members_raw = pd.DataFrame()
     conn.close()
     with open(os.path.join(BASE, "nicknames.json"), encoding="utf-8") as f:
         nicknames = json.load(f)
@@ -78,6 +84,13 @@ def main():
             shutil.copy2(os.path.join(POTD_DIR, os.path.basename(meta["image"])), dst)
 
     official = int(row[0]) if row else 0
+    aliases = report["aliases"]
+    members = []
+    for m in members_raw.itertuples():
+        raw_name = str(m.utente).strip()
+        name = nicknames.get(aliases.get(raw_name, raw_name), aliases.get(raw_name, raw_name))
+        members.append({"name": name, "first": str(m.prima_vista),
+                        "last": str(m.ultima_vista), "admin": int(m.admin)})
     data = {
         "generated_at": int(time.time()),
         "db_updated_at": int(os.path.getmtime(DB_PATH)),
@@ -86,6 +99,8 @@ def main():
         "rows": rows,
         "potd": dict(sorted(potd.items())),
         "milestone_snipers": {"65000": str(override[0])} if override else {},
+        "members": members,
+        "member_snapshot": str(snapshot[0]) if snapshot else "",
         "report": {
             "rows": report["rows"],
             "ts_fixed": report["ts_fixed"],
