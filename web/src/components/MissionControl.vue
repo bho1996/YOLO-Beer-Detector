@@ -4,6 +4,7 @@ import type { View } from '../lib/view'
 import { dayStart } from '../lib/view'
 import { sumBeers } from '../lib/stats'
 import { fmt, fmtTime, MIN_PER_DAY, weekdayOf } from '../lib/time'
+import { CONFIG } from '../config'
 import Kpi from './Kpi.vue'
 
 const props = defineProps<{ v: View }>()
@@ -28,6 +29,26 @@ const k = computed(() => {
   return { today, ySame, week, lastWeekSame, drinkers: todayUsers.size, newThisWeek: weekNew.size, last, minsSinceLast }
 })
 
+const missions = computed(() => {
+  const { rows, refT, refDay, total } = props.v
+  const step = CONFIG.milestoneStep
+  const nextMs = (Math.floor(total / step) + 1) * step
+  const toNext = nextMs - total
+  const last7 = sumBeers(rows, refT - 7 * MIN_PER_DAY, refT + 1)
+  const pace = last7 / 7
+  const week0 = dayStart(refDay - weekdayOf(refDay))
+  const prevWeek = sumBeers(rows, week0 - 7 * MIN_PER_DAY, week0)
+  const goal = prevWeek > 0 ? Math.max(500, Math.ceil(prevWeek * 1.1 / 100) * 100) : 1500
+  const week = k.value.week
+  const daysLeft = 7 - weekdayOf(refDay)
+  return {
+    nextMs, toNext, progress: Math.max(0, Math.min(1, 1 - toNext / step)),
+    etaHours: pace > 0 ? Math.round(toNext / (pace / 24)) : null,
+    goal, week, weekProgress: Math.min(week / goal, 1),
+    needPerDay: week < goal ? Math.ceil((goal - week) / daysLeft) : 0,
+  }
+})
+
 const status = computed(() => {
   const m = k.value.minsSinceLast
   if (!k.value.last) return { cls: 'dry', text: '🍺 No beers tracked yet at this point in time.' }
@@ -40,7 +61,29 @@ const status = computed(() => {
 <template>
   <section class="section">
     <h2 class="section-title">🎯 Mission Control</h2>
-    <div class="grid g5">
+    <div class="grid g2">
+      <div class="card mission">
+        <div class="mission-title">🚩 Next Milestone: <b>{{ fmt(missions.nextMs) }}</b></div>
+        <div class="bar"><div :style="{ width: missions.progress * 100 + '%' }" /></div>
+        <div class="bar-caption">
+          <span>{{ fmt(missions.toNext) }} to go</span>
+          <span v-if="missions.etaHours !== null">ETA ≈ {{ fmt(missions.etaHours) }}h at this week's pace</span>
+        </div>
+        <p v-if="missions.toNext <= 10" class="mission-alert">🚨 ONLY {{ missions.toNext }} TO GO! Who is going to snipe it?</p>
+      </div>
+      <div class="card mission">
+        <div class="mission-title">📅 Weekly Mission: <b>{{ fmt(missions.goal) }}</b></div>
+        <div class="bar"><div :style="{ width: missions.weekProgress * 100 + '%' }" /></div>
+        <div class="bar-caption">
+          <span v-if="missions.week >= missions.goal" class="mission-done">🎉 MISSION ACCOMPLISHED! ({{ fmt(missions.week) }} this week)</span>
+          <template v-else>
+            <span>{{ fmt(missions.week) }} so far · {{ fmt(missions.goal - missions.week) }} left</span>
+            <span>need ~{{ fmt(missions.needPerDay) }}/day</span>
+          </template>
+        </div>
+      </div>
+    </div>
+    <div class="grid g5 kpi-row">
       <Kpi label="🍺 Today" :value="fmt(k.today)" :delta="k.today - k.ySame" deltaLabel="vs yesterday at this time" />
       <Kpi label="📅 This week" :value="fmt(k.week)" :delta="k.week - k.lastWeekSame" deltaLabel="vs last week so far" />
       <Kpi label="🙋 Drinkers today" :value="fmt(k.drinkers)" />

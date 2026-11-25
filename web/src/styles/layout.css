@@ -39,11 +39,23 @@
 .footer { margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--line); }
 
 @media (max-width: 900px) {
+  .container { padding: 0 12px 40px; }
   .hero, .g32, .g2 { grid-template-columns: 1fr; }
   .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .g5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .g3 { grid-template-columns: 1fr; }
   .glass { max-width: 150px !important; }
-  .topbar-inner { flex-wrap: wrap; }
+  .topbar-inner { flex-wrap: wrap; padding: 8px 12px; gap: 8px; }
+  .brand { font-size: 15px; }
   .timemachine { flex-basis: 100%; }
+  .tm-label { font-size: 12px; }
+  .hero { padding: 22px 0 4px; }
+  .hero h1 { font-size: 30px; }
+  .counter { font-size: clamp(46px, 15vw, 78px); }
+  .card { padding: 14px; }
+  .kpi .value { font-size: 24px; }
+  .tabs button { padding: 8px 12px; font-size: 13px; }
+  th, td { padding: 7px 8px; font-size: 13px; }
+  .potd-img { max-height: 280px; }
+  .thumbs { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); }
 }

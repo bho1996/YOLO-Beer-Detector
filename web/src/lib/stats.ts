@@ -141,19 +141,6 @@ export function binges(rows: Row[], n = 10) {
   return [...m.values()].sort((a, b) => b.score - a.score).slice(0, n)
 }
 
-export function nerdStats(rows: Row[], users: User[], n = 10) {
-  const m = new Map<number, { u: number; beers: number; uploads: number }>()
-  for (const r of rows) {
-    const e = m.get(r.u) || { u: r.u, beers: 0, uploads: 0 }
-    e.beers += r.beers; e.uploads++
-    m.set(r.u, e)
-  }
-  return [...m.values()].filter(e => e.uploads >= 10)
-    .map(e => ({ ...e, name: users[e.u]?.name ?? '?', flag: users[e.u]?.flag ?? '🍺',
-                 avg: Math.round(e.beers / e.uploads * 100) / 100 }))
-    .sort((a, b) => b.avg - a.avg).slice(0, n)
-}
-
 export function deathRow(rows: Row[], members: Member[], snapshot: string, refDay: number, months: number, users: User[]) {
   const cutoff = refDay - Math.round(months * 30.4)
   const activity = new Map<number, { last: number | null; uploads: number }>()
