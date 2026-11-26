@@ -33,7 +33,7 @@ const funding = computed(() => {
         <div class="bar mt"><div :style="{ width: funding.pct * 100 + '%' }" /></div>
         <div class="bar-caption"><span>€{{ funding.got }} raised</span><span>€{{ funding.need }} needed</span></div>
       </div>
-      <p v-if="allSupporters.length" class="small mt">💛 Thanks to: {{ allSupporters.join(' · ') }}</p>
+      <p v-if="allSupporters.length" class="small mt">🍺 Thanks to: {{ allSupporters.join(' · ') }}</p>
     </div>
     <div>
       <DonateButtons source="footer" />
