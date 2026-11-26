@@ -83,13 +83,11 @@ const status = computed(() => {
         </div>
       </div>
     </div>
-    <div class="grid g5 kpi-row">
+    <div class="grid g4 kpi-row">
       <Kpi label="🍺 Today" :value="fmt(k.today)" :delta="k.today - k.ySame" deltaLabel="vs yesterday at this time" />
       <Kpi label="📅 This week" :value="fmt(k.week)" :delta="k.week - k.lastWeekSame" deltaLabel="vs last week so far" />
       <Kpi label="🙋 Drinkers today" :value="fmt(k.drinkers)" />
       <Kpi label="🆕 New drinkers this week" :value="fmt(k.newThisWeek)" />
-      <Kpi label="🤖 Ghost beers" :value="fmt(props.v.ghost)" deltaLabel="not tracked by the bot"
-           hint="Beers counted before the bot existed, plus totals written by the group in chat. They are not attributed to any drinker." />
     </div>
     <div class="banner" :class="status.cls">{{ status.text }}</div>
   </section>

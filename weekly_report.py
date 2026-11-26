@@ -134,7 +134,6 @@ def build(target=None):
         "",
         f"🎯 Milestones: {len(milestones)} · new drinkers: {len(set(weekly['utente']) - set(history['utente']))}",
         f"🍺 {fun['liters']:.0f} L · {fun['bathtubs']:.1f} bathtubs · €{fun['money']:.0f} bar tab",
-        f"🤖 Ghost beers (before the bot / text updates): {ghost:,}",
     ])
 
     return {

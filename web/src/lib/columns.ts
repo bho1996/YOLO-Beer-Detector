@@ -3,6 +3,7 @@ export interface Col {
   label: string
   num?: boolean
   fmt?: (v: any, row: any) => string
+  sortVal?: (row: any) => number | string
 }
 
 const MEDALS = ['🥇', '🥈', '🥉']

@@ -63,8 +63,8 @@ const death = computed(() => deathRow(props.v.rows, props.v.data.members, props.
 const deathCols: Col[] = [
   { key: 'name', label: 'Drinker', fmt: (n: string, row: any) => `${row.admin ? '⭐ ' : ''}${n}` },
   { key: 'status', label: 'Status' },
-  { key: 'monthsSilent', label: 'Months silent', num: true },
-  { key: 'lastUpload', label: 'Last upload' },
+  { key: 'monthsSilent', label: 'Months silent', num: true, fmt: (v: number | null) => v == null ? 'never' : v.toLocaleString('en-US'), sortVal: (r: any) => r.monthsSilent ?? Infinity },
+  { key: 'lastUpload', label: 'Last upload', sortVal: (r: any) => r.lastDay ?? -Infinity },
   { key: 'seenSince', label: 'Seen since' },
   { key: 'uploads', label: 'Uploads', num: true },
 ]
@@ -87,9 +87,21 @@ const deathCols: Col[] = [
 
   <div v-else-if="period === 'death'" class="card">
     <h3>💀 Death Row</h3>
-    <label class="small muted">Months of silence: <b>{{ deathMonths }}</b>
-      <input v-model.number="deathMonths" type="range" min="1" max="12" style="vertical-align:middle;margin-left:8px" />
-    </label>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <label class="small muted" for="death-months">Months of silence: <b>{{ deathMonths }}</b></label>
+      <input
+        id="death-months"
+        :value="deathMonths"
+        @input="deathMonths = Number(($event.target as HTMLInputElement).value)"
+        @change="deathMonths = Number(($event.target as HTMLInputElement).value)"
+        type="range"
+        min="1"
+        max="12"
+        step="1"
+        style="accent-color:var(--amber);flex:0 1 220px"
+      />
+      <span class="small muted"><b>{{ death.candidates.length.toLocaleString('en-US') }}</b> candidates · no beer since <b>{{ fmtDay(death.cutoff) }}</b></span>
+    </div>
     <p class="small muted" v-if="death.known">
       Membership from the bot snapshot of <b>{{ v.data.memberSnapshot }}</b> ({{ death.inGroup }} members). Only people confirmed in the group are listed.
     </p>

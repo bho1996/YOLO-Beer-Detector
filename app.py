@@ -541,13 +541,12 @@ with tab_player:
 with tab_data:
     st.subheader("🩺 Data Health")
     st.caption("The database is opened read-only. All fixes below are applied in memory only — no data is ever changed or deleted.")
-    d1, d2, d3, d4 = st.columns(4)
+    d1, d2, d3 = st.columns(3)
     d1.metric("Rows in DB", f"{REPORT['rows']:,}")
     d2.metric("Dates repaired", f"{REPORT['ts_fixed'] + REPORT['swap_fixed']:,}",
               help="Day/month swapped by an old import. Fixed using the WhatsApp timestamp in the file name or neighbouring uploads.")
     d3.metric("Identities merged", f"{len(REPORT['aliases']):,}", delta=f"{REPORT['alias_rows']:,} uploads", delta_color="off",
               help="Old bot versions stored truncated prefixes (e.g. '+12 *** 1234' instead of '+1 *** 1234').")
-    d4.metric("Ghost beers", f"{ghost_beers:,}", help="Official total minus bot-tracked beers (pre-bot history, text-only updates).")
     e1, e2, e3, e4 = st.columns(4)
     e1.metric("Official total (DB)", f"{OFFICIAL_TOTAL_DB:,}")
     e2.metric("Bot-tracked beers", f"{db_beers_total:,}")

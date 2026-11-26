@@ -43,6 +43,14 @@ export const fmtDay = (day: number, year = true) => {
 export const fmtDateTime = (t: number) => `${fmtDay(dayOf(t))}, ${fmtTime(t)}`
 export const isoDay = (day: number) => d(day * MIN_PER_DAY).toISOString().slice(0, 10)
 export const dayFromIso = (s: string) => Math.floor(Date.parse(s + 'T00:00:00Z') / 86400000)
+export function subtractMonths(day: number, months: number): number {
+  const x = d(day * MIN_PER_DAY)
+  const y = x.getUTCFullYear()
+  const m = x.getUTCMonth() - months
+  const dom = x.getUTCDate()
+  const lastDom = new Date(Date.UTC(y, m + 1, 0)).getUTCDate()
+  return Math.floor(Date.UTC(y, m, Math.min(dom, lastDom)) / 86400000)
+}
 export const monthKey = (t: number) => { const x = d(t); return `${x.getUTCFullYear()}-${pad(x.getUTCMonth() + 1)}` }
 export const fmtMonthYear = (t: number) => { const x = d(t); return `${MONTHS[x.getUTCMonth()]} ${x.getUTCFullYear()}` }
 

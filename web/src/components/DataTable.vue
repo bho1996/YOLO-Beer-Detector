@@ -21,8 +21,15 @@ watch(() => props.rows, () => { shownRaw.value = props.pageSize })
 const sorted = computed(() => {
   if (!sortKey.value) return props.rows
   const k = sortKey.value
-  return [...props.rows].sort((a, b) =>
-    (a[k] > b[k] ? 1 : a[k] < b[k] ? -1 : 0) * sortDir.value)
+  const col = props.cols.find(c => c.key === k)
+  const get = col?.sortVal ? col.sortVal : (r: any) => r[k]
+  return [...props.rows].sort((a, b) => {
+    const av = get(a), bv = get(b)
+    if (av === bv) return 0
+    if (av == null) return 1
+    if (bv == null) return -1
+    return (av > bv ? 1 : -1) * sortDir.value
+  })
 })
 
 function sortBy(k: string) {

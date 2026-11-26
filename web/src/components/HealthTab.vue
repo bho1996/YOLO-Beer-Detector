@@ -36,13 +36,11 @@ const auditCols: Col[] = [
 </script>
 
 <template>
-  <div class="grid g3">
+  <div class="grid g2">
     <div class="card kpi"><div class="label">👥 Official group total</div><div class="value">{{ fmt(v.data.officialTotal) }}</div>
       <div class="small muted">Counter kept by the bot, aligned to the numbers written in the group.</div></div>
     <div class="card kpi"><div class="label">📸 Beers tracked by the bot</div><div class="value">{{ fmt(tracked) }}</div>
       <div class="small muted">1 per approved photo + 1 per down video.</div></div>
-    <div class="card kpi"><div class="label">👻 Untracked beers</div><div class="value">{{ fmt(v.ghost) }}</div>
-      <div class="small muted">Before the bot existed, or only written as text in the group.</div></div>
   </div>
 
   <div class="card mt">

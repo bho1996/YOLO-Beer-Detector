@@ -63,9 +63,8 @@ const msCols: Col[] = [
         <p class="small muted">Milestone times are approximate: the official total has no history.</p>
       </div>
       <div class="card">
-        <h3>🤖 Ghost beers</h3>
-        <p>{{ fmt(report.ghost) }} beers are in the official total but not tracked by the bot: they come from the pre-bot era and from numbers written by the group in chat. They cannot be attributed to a drinker.</p>
-        <p class="small muted">This week: {{ fmt(report.beers) }} beers · {{ fmt(report.videos) }} videos · {{ fmt(report.zero_photos) }} photos at zero points.</p>
+        <h3>📊 Week breakdown</h3>
+        <p class="small muted">This week: {{ fmt(report.beers) }} beers · {{ fmt(report.drinkers) }} drinkers · {{ fmt(report.videos) }} videos · {{ fmt(report.zero_photos) }} photos at zero points.</p>
       </div>
     </div>
   </template>

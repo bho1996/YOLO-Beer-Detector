@@ -1,5 +1,5 @@
 import type { Row, User, Member } from './data'
-import { dayOf, hourOf, weekdayOf, fmtDay, fmtDateTime, monthKey, dayFromIso, MIN_PER_DAY } from './time'
+import { dayOf, hourOf, weekdayOf, fmtDay, fmtDateTime, monthKey, dayFromIso, subtractMonths, MIN_PER_DAY } from './time'
 
 export interface LbEntry {
   rank: number; u: number; name: string; flag: string; nation: string
@@ -142,9 +142,10 @@ export function binges(rows: Row[], n = 10) {
 }
 
 export function deathRow(rows: Row[], members: Member[], snapshot: string, refDay: number, months: number, users: User[]) {
-  const cutoff = refDay - Math.round(months * 30.4)
+  const cutoff = subtractMonths(refDay, months)
   const activity = new Map<number, { last: number | null; uploads: number }>()
   for (const r of rows) {
+    if (r.beers <= 0) continue
     const e = activity.get(r.u) || { last: null, uploads: 0 }
     e.uploads++
     if (e.last == null || r.day > e.last) e.last = r.day
@@ -164,11 +165,12 @@ export function deathRow(rows: Row[], members: Member[], snapshot: string, refDa
     const inGroup = known && !!member ? member.last === snapshot : null
     const status = inGroup === null ? 'Unknown' : inGroup ? 'In group' : 'Left'
     const firstDay = member ? dayFromIso(member.first) : null
-    const inactive = last !== null && last < cutoff
-    const silent = last === null && firstDay !== null && firstDay < cutoff
+    const inactive = last !== null && last <= cutoff
+    const silent = last === null && firstDay !== null && firstDay <= cutoff
     const entry = {
       u, name, flag: flagOf(u), status, uploads: a?.uploads ?? 0,
-      monthsSilent: last === null ? null : Math.round((refDay - last) / 30.4 * 10) / 10,
+      lastDay: last,
+      monthsSilent: last === null ? null : Math.max(0, Math.round((refDay - last) / 30.4375 * 10) / 10),
       lastUpload: last === null ? 'never' : fmtDay(last),
       seenSince: member?.first ?? '?', admin: !!member?.admin,
     }
@@ -182,7 +184,8 @@ export function deathRow(rows: Row[], members: Member[], snapshot: string, refDa
   }
   for (const m of members) consider(idx.get(m.name) ?? -1, m.name, m)
   candidates.sort((a, b) => (b.monthsSilent ?? Infinity) - (a.monthsSilent ?? Infinity) || b.uploads - a.uploads)
-  return { candidates, gone, known, inGroup: members.filter(m => m.last === snapshot).length }
+  gone.sort((a, b) => (b.lastDay ?? -Infinity) - (a.lastDay ?? -Infinity))
+  return { candidates, gone, known, cutoff, inGroup: members.filter(m => m.last === snapshot).length }
 }
 
 export function badges(rows: Row[]): string[] {
