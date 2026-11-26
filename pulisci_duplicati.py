@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Rimuove dal database (classifica) e da photo_folder le foto duplicate.
 
-Applica gli stessi criteri introdotti in bot.js (commit 87770e72):
+Applica gli stessi criteri di bot.js:
   1. Duplicato esatto: stessa dimensione e stesso MD5 (a qualsiasi distanza di tempo).
-  2. Quasi-duplicato ravvicinato: dHash 16x16 (256 bit) con distanza di Hamming <= 3
-     entro 60 secondi dalla pubblicazione precedente (data da WA_<unix> o data_ora).
+  2. Quasi-duplicato ravvicinato: pHash 64-bit (DCT 8x8) con distanza di Hamming <= 8
+     entro 60 secondi dalla pubblicazione (data da WA_<unix> o data_ora).
+     Copre le varianti "anteprima compressa" + "HD" di WhatsApp della stessa foto,
+     che con il vecchio dHash 16x16/toll.3 non venivano riconosciute.
 
 NON modifica MAI OFFICIAL_TOTAL in config.
 
@@ -15,11 +17,11 @@ Uso:
     ./venv/bin/python pulisci_duplicati.py --apply
   Opzioni:
     --window 60       finestra temporale in secondi per quasi-duplicati (default: 60)
-    --tolerance 3     distanza Hamming massima su dHash 256-bit (default: 3)
-    --workers 4       processi paralleli per il calcolo dHash (default: 4)
+    --tolerance 8     distanza Hamming massima su pHash 64-bit (default: 8)
+    --workers 4       processi paralleli per il calcolo pHash (default: 4)
     --db PATH         percorso DB (default: 1m_beers.db nella cartella dello script)
     --photos DIR      cartella foto (default: photo_folder nella cartella dello script)
-    --cache PATH      cache SQLite per MD5/dHash (default: /tmp/yolo_dedup_cache.sqlite)
+    --cache PATH      cache SQLite per MD5/pHash (default: /tmp/yolo_dedup_phash.sqlite)
     --json-report F   salva elenco dettagliato dei duplicati in JSON
 """
 from __future__ import annotations
@@ -39,12 +41,13 @@ import time
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import numpy as np
 from PIL import Image
 
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_DB = BASE_DIR / "1m_beers.db"
 DEFAULT_PHOTOS = BASE_DIR / "photo_folder"
-DEFAULT_CACHE = Path("/tmp/yolo_dedup_cache.sqlite")
+DEFAULT_CACHE = Path("/tmp/yolo_dedup_phash.sqlite")
 ROME = ZoneInfo("Europe/Rome")
 WA_TS_RE = re.compile(r"^WA_(\d+)")
 DATE_FORMATS = (
@@ -105,28 +108,29 @@ def compute_md5(path: Path) -> str | None:
         return None
 
 
-def compute_dhash(path: Path) -> int | None:
+def compute_phash(path: Path) -> int | None:
+    """pHash a 64 bit (DCT 8x8 su immagine 32x32), identico a bot.js."""
     try:
         with Image.open(path) as im:
-            gray = im.convert("L").resize((17, 16))
-            if hasattr(gray, "get_flattened_data"):
-                px = list(gray.get_flattened_data())
-            else:
-                px = list(gray.getdata())
+            a = np.asarray(im.convert("L").resize((32, 32)), dtype=float)
     except Exception:
         return None
+    x = np.arange(32)
+    basis = np.cos(np.pi * (x[:, None] + 0.5) * x[None, :] / 32) * np.sqrt(2 / 32)
+    basis[0] /= np.sqrt(2)
+    c = basis @ a @ basis.T
+    low = c[:8, :8].flatten()[1:]
+    med = float(np.median(low))
     bits = 0
-    for y in range(16):
-        row = y * 17
-        for x in range(16):
-            bits = (bits << 1) | (1 if px[row + x] > px[row + x + 1] else 0)
+    for v in low:
+        bits = (bits << 1) | (1 if v > med else 0)
     return bits
 
 
-def _dhash_worker(args: tuple[str, str]) -> tuple[str, str | None]:
+def _phash_worker(args: tuple[str, str]) -> tuple[str, str | None]:
     fname, path_str = args
-    dh = compute_dhash(Path(path_str))
-    return fname, (format(dh, "064x") if dh is not None else None)
+    h = compute_phash(Path(path_str))
+    return fname, (format(h, "016x") if h is not None else None)
 
 
 def _md5_worker(args: tuple[str, str]) -> tuple[str, str | None]:
@@ -139,7 +143,7 @@ def hamming_distance(a: int, b: int) -> int:
 
 
 class HashCache:
-    """Cache locale (nome_file, size, mtime_ns) -> md5, dhash per velocizzare riesecuzioni."""
+    """Cache locale (nome_file, size, mtime_ns) -> md5, phash."""
 
     def __init__(self, path: Path | None):
         self.path = path
@@ -152,32 +156,37 @@ class HashCache:
                     size INTEGER NOT NULL,
                     mtime_ns INTEGER NOT NULL,
                     md5 TEXT,
-                    dhash TEXT
+                    phash TEXT
                 )"""
             )
+            cols = {r[1] for r in self.conn.execute("PRAGMA table_info(file_hashes)")}
+            if "phash" not in cols:
+                self.conn.execute("ALTER TABLE file_hashes ADD COLUMN phash TEXT")
+            if "md5" not in cols:
+                self.conn.execute("ALTER TABLE file_hashes ADD COLUMN md5 TEXT")
             self.conn.commit()
 
     def load_all(self) -> dict[str, tuple[int, int, str | None, str | None]]:
         if self.conn is None:
             return {}
         out: dict[str, tuple[int, int, str | None, str | None]] = {}
-        for fn, sz, mt, md5, dh in self.conn.execute(
-            "SELECT nome_file, size, mtime_ns, md5, dhash FROM file_hashes"
+        for fn, sz, mt, md5, ph in self.conn.execute(
+            "SELECT nome_file, size, mtime_ns, md5, phash FROM file_hashes"
         ):
-            out[fn] = (sz, mt, md5, dh)
+            out[fn] = (sz, mt, md5, ph)
         return out
 
     def upsert_many(self, items: list[tuple[str, int, int, str | None, str | None]]) -> None:
         if self.conn is None or not items:
             return
         self.conn.executemany(
-            """INSERT INTO file_hashes (nome_file, size, mtime_ns, md5, dhash)
+            """INSERT INTO file_hashes (nome_file, size, mtime_ns, md5, phash)
                VALUES (?, ?, ?, ?, ?)
                ON CONFLICT(nome_file) DO UPDATE SET
                  size = excluded.size,
                  mtime_ns = excluded.mtime_ns,
                  md5 = COALESCE(excluded.md5, file_hashes.md5),
-                 dhash = COALESCE(excluded.dhash, file_hashes.dhash)""",
+                 phash = COALESCE(excluded.phash, file_hashes.phash)""",
             items,
         )
         self.conn.commit()
@@ -189,7 +198,6 @@ class HashCache:
 
 
 def load_photo_rows(conn: sqlite3.Connection, photos_dir: Path) -> list[PhotoRow]:
-    # Singola scansione veloce della directory (molto piu' rapida di 38k stat su mergerfs)
     disk_index: dict[str, tuple[int, int]] = {}
     with os.scandir(photos_dir) as it:
         for entry in it:
@@ -220,7 +228,6 @@ def load_photo_rows(conn: sqlite3.Connection, photos_dir: Path) -> list[PhotoRow
                 mtime_ns=info[1] if info is not None else None,
             )
         )
-    # Ordine cronologico: conserva la prima pubblicazione; a parita' di timestamp preferisce punti > 0
     rows.sort(key=lambda r: (r.ts if r.ts is not None else 10**18, 0 if r.punti > 0 else 1, r.row_id))
     return rows
 
@@ -228,19 +235,15 @@ def load_photo_rows(conn: sqlite3.Connection, photos_dir: Path) -> list[PhotoRow
 def find_duplicates(
     rows: list[PhotoRow],
     window_seconds: int = 60,
-    tolerance: int = 3,
+    tolerance: int = 8,
     workers: int = 4,
     cache_path: Path | None = None,
     verbose: bool = False,
 ) -> tuple[list[DuplicateMatch], list[PhotoRow]]:
-    """Trova duplicati esatti (MD5/nome_file) e quasi-duplicati (dHash entro window_seconds).
-
-    Ritorna (duplicati, righe_mantenute).
-    """
     cache = HashCache(cache_path)
     cached = cache.load_all()
     try:
-        # Step 1: MD5 solo per i file con dimensione condivisa (come bot.js)
+        # Step 1: MD5 solo per file con dimensione condivisa
         size_counts = collections.Counter(r.size for r in rows if r.exists and r.size is not None)
         md5_map: dict[str, str | None] = {}
         md5_todo: list[tuple[str, str]] = []
@@ -265,22 +268,20 @@ def find_duplicates(
                 with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
                     for fn, digest in ex.map(_md5_worker, md5_todo):
                         md5_map[fn] = digest
-                        sz, mt = meta_by_name[fn]
-                        to_save.append((fn, sz, mt, digest, None))
+                        to_save.append((fn, *meta_by_name[fn], digest, None))
             else:
                 for item in md5_todo:
                     fn, digest = _md5_worker(item)
                     md5_map[fn] = digest
-                    sz, mt = meta_by_name[fn]
-                    to_save.append((fn, sz, mt, digest, None))
+                    to_save.append((fn, *meta_by_name[fn], digest, None))
             cache.upsert_many(to_save)
 
-        # Step 2: trova le righe uniche per nome_file/MD5 prima di calcolare dHash
         def choose_victim(earlier: PhotoRow, current: PhotoRow) -> tuple[PhotoRow, PhotoRow, bool]:
             if earlier.punti <= 0 and current.punti > 0:
                 return earlier, current, True
             return current, earlier, False
 
+        # Step 2: elimina duplicati esatti e costruisce i sopravvissuti
         seen_filename: dict[str, PhotoRow] = {}
         seen_md5: dict[tuple[int, str], PhotoRow] = {}
         survivors_by_id: dict[int, PhotoRow] = {}
@@ -333,80 +334,76 @@ def find_duplicates(
             if md5 is not None and row.size is not None:
                 seen_md5[(row.size, md5)] = row
 
-        # Step 3: calcola dHash solo per i sopravvissuti che hanno un vicino entro window_seconds
+        # Step 3: pHash solo per i sopravvissuti con un vicino entro window_seconds
         survivors = [r for r in rows if r.row_id in survivors_by_id]
-        needs_dhash: set[int] = set()
+        needs: set[int] = set()
         timed_idx = [i for i, r in enumerate(survivors) if r.exists and r.ts is not None]
         for pos, idx in enumerate(timed_idx):
             if pos + 1 < len(timed_idx):
-                nxt = timed_idx[pos + 1]
-                if survivors[nxt].ts - survivors[idx].ts < window_seconds:  # type: ignore[operator]
-                    needs_dhash.add(survivors[idx].row_id)
-                    needs_dhash.add(survivors[nxt].row_id)
+                if survivors[timed_idx[pos + 1]].ts - survivors[idx].ts < window_seconds:  # type: ignore[operator]
+                    needs.add(survivors[idx].row_id)
+                    needs.add(survivors[timed_idx[pos + 1]].row_id)
 
-        dhash_map: dict[str, int | None] = {}
-        dhash_todo: list[tuple[str, str]] = []
-        dhash_meta: dict[str, tuple[int, int]] = {}
+        phash_map: dict[str, int | None] = {}
+        phash_todo: list[tuple[str, str]] = []
+        phash_meta: dict[str, tuple[int, int]] = {}
         for r in survivors:
-            if r.row_id not in needs_dhash or r.size is None or r.mtime_ns is None:
+            if r.row_id not in needs or r.size is None or r.mtime_ns is None:
                 continue
-            if r.nome_file in dhash_meta:
+            if r.nome_file in phash_meta:
                 continue
-            dhash_meta[r.nome_file] = (r.size, r.mtime_ns)
+            phash_meta[r.nome_file] = (r.size, r.mtime_ns)
             c = cached.get(r.nome_file)
             if c and c[0] == r.size and c[1] == r.mtime_ns and c[3] is not None:
-                dhash_map[r.nome_file] = int(c[3], 16)
+                phash_map[r.nome_file] = int(c[3], 16)
             else:
-                dhash_todo.append((r.nome_file, str(r.path)))
+                phash_todo.append((r.nome_file, str(r.path)))
 
-        if dhash_todo:
+        if phash_todo:
             t0 = time.time()
             if verbose:
                 print(
-                    f"Calcolo dHash su {len(dhash_todo)} foto ravvicinate "
-                    f"(gia' in cache: {len(dhash_meta) - len(dhash_todo)}, workers={workers})...",
+                    f"Calcolo pHash su {len(phash_todo)} foto ravvicinate "
+                    f"(gia' in cache: {len(phash_meta) - len(phash_todo)}, workers={workers})...",
                     flush=True,
                 )
             batch: list[tuple[str, int, int, str | None, str | None]] = []
             done = 0
-            if workers > 1 and len(dhash_todo) > 20:
+            if workers > 1 and len(phash_todo) > 20:
                 with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as ex:
-                    for fn, hex_dh in ex.map(_dhash_worker, dhash_todo, chunksize=32):
-                        dhash_map[fn] = int(hex_dh, 16) if hex_dh is not None else None
-                        sz, mt = dhash_meta[fn]
-                        batch.append((fn, sz, mt, None, hex_dh))
+                    for fn, hex_ph in ex.map(_phash_worker, phash_todo, chunksize=32):
+                        phash_map[fn] = int(hex_ph, 16) if hex_ph is not None else None
+                        batch.append((fn, *phash_meta[fn], None, hex_ph))
                         done += 1
                         if len(batch) >= 1000:
                             cache.upsert_many(batch)
                             batch.clear()
                             if verbose:
                                 elapsed = time.time() - t0
-                                rate = done / elapsed if elapsed > 0 else 0
-                                print(f"  dHash: {done}/{len(dhash_todo)} ({rate:.1f} foto/s)", flush=True)
+                                print(f"  pHash: {done}/{len(phash_todo)} ({done / elapsed:.1f} foto/s)", flush=True)
             else:
-                for item in dhash_todo:
-                    fn, hex_dh = _dhash_worker(item)
-                    dhash_map[fn] = int(hex_dh, 16) if hex_dh is not None else None
-                    sz, mt = dhash_meta[fn]
-                    batch.append((fn, sz, mt, None, hex_dh))
+                for item in phash_todo:
+                    fn, hex_ph = _phash_worker(item)
+                    phash_map[fn] = int(hex_ph, 16) if hex_ph is not None else None
+                    batch.append((fn, *phash_meta[fn], None, hex_ph))
             cache.upsert_many(batch)
 
-        # Step 4: finestra scorrevole cronologica per i quasi-duplicati dHash entro window_seconds
-        recent_hashes: collections.deque[list] = collections.deque()
+        # Step 4: finestra scorrevole cronologica per i quasi-duplicati pHash
+        recent: collections.deque[list] = collections.deque()
         kept_by_id: dict[int, PhotoRow] = {}
 
         for row in survivors:
-            dh = dhash_map.get(row.nome_file) if row.row_id in needs_dhash else None
-            if dh is not None and row.ts is not None:
-                while recent_hashes and (row.ts - recent_hashes[0][0].ts) >= window_seconds:
-                    recent_hashes.popleft()
+            ph = phash_map.get(row.nome_file) if row.row_id in needs else None
+            if ph is not None and row.ts is not None:
+                while recent and (row.ts - recent[0][0].ts) >= window_seconds:
+                    recent.popleft()
                 matched_slot = None
                 matched_dist = None
-                for slot in recent_hashes:
-                    earlier_row, earlier_dh = slot
+                for slot in recent:
+                    earlier_row, earlier_ph = slot
                     if earlier_row.row_id not in kept_by_id:
                         continue
-                    dist = hamming_distance(dh, earlier_dh)
+                    dist = hamming_distance(ph, earlier_ph)
                     if dist <= tolerance:
                         matched_slot = slot
                         matched_dist = dist
@@ -418,18 +415,18 @@ def find_duplicates(
                         kept_by_id.pop(earlier.row_id, None)
                         kept_by_id[winner.row_id] = winner
                         matched_slot[0] = winner
-                        matched_slot[1] = dh
+                        matched_slot[1] = ph
                     matches.append(
                         DuplicateMatch(
                             removed=victim,
                             kept=winner,
-                            reason="near_dhash",
+                            reason="near_phash",
                             distance=matched_dist,
                             dt_seconds=(row.ts - earlier.ts) if earlier.ts is not None else None,
                         )
                     )
                     continue
-                recent_hashes.append([row, dh])
+                recent.append([row, ph])
 
             kept_by_id[row.row_id] = row
 
@@ -458,24 +455,16 @@ def read_official_total(conn: sqlite3.Connection) -> str | None:
 
 
 def table_exists(conn: sqlite3.Connection, name: str) -> bool:
-    row = conn.execute(
+    return conn.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)
-    ).fetchone()
-    return row is not None
+    ).fetchone() is not None
 
 
-def apply_removals(
-    db_path: Path,
-    photos_dir: Path,
-    matches: list[DuplicateMatch],
-) -> dict:
-    """Rimuove le righe duplicate dal DB e i file da photo_folder senza toccare OFFICIAL_TOTAL."""
+def apply_removals(db_path: Path, photos_dir: Path, matches: list[DuplicateMatch]) -> dict:
     if not matches:
         return {
             "backup": None,
             "db_rows_deleted": 0,
-            "media_hash_deleted": 0,
-            "pending_deleted": 0,
             "files_deleted": 0,
             "bytes_freed": 0,
             "official_total": None,
@@ -492,31 +481,18 @@ def apply_removals(
     try:
         conn.execute("BEGIN IMMEDIATE")
         conn.executemany("DELETE FROM log_birre WHERE id = ?", [(i,) for i in ids_to_delete])
-        db_rows_deleted = len(ids_to_delete)
 
         unreferenced_files: list[str] = []
         for fname in candidate_files:
-            still_used = conn.execute(
-                "SELECT 1 FROM log_birre WHERE nome_file = ? LIMIT 1", (fname,)
-            ).fetchone()
-            if not still_used:
+            if not conn.execute("SELECT 1 FROM log_birre WHERE nome_file = ? LIMIT 1", (fname,)).fetchone():
                 unreferenced_files.append(fname)
 
-        media_hash_deleted = 0
-        if unreferenced_files and table_exists(conn, "media_hash"):
-            cur = conn.executemany(
-                "DELETE FROM media_hash WHERE nome_file = ?",
-                [(f,) for f in unreferenced_files],
-            )
-            media_hash_deleted = cur.rowcount if cur.rowcount is not None and cur.rowcount >= 0 else 0
-
-        pending_deleted = 0
-        if unreferenced_files and table_exists(conn, "foto_in_attesa"):
-            cur = conn.executemany(
-                "DELETE FROM foto_in_attesa WHERE nome_file = ?",
-                [(f,) for f in unreferenced_files],
-            )
-            pending_deleted = cur.rowcount if cur.rowcount is not None and cur.rowcount >= 0 else 0
+        for table in ("media_hash", "media_phash", "foto_in_attesa"):
+            if unreferenced_files and table_exists(conn, table):
+                conn.executemany(
+                    f"DELETE FROM {table} WHERE nome_file = ?",
+                    [(f,) for f in unreferenced_files],
+                )
 
         total_after = read_official_total(conn)
         if total_before != total_after:
@@ -553,9 +529,7 @@ def apply_removals(
 
     return {
         "backup": str(backup_path),
-        "db_rows_deleted": db_rows_deleted,
-        "media_hash_deleted": media_hash_deleted,
-        "pending_deleted": pending_deleted,
+        "db_rows_deleted": len(ids_to_delete),
         "files_deleted": files_deleted,
         "bytes_freed": bytes_freed,
         "official_total": total_before,
@@ -567,14 +541,14 @@ def main(argv: list[str] | None = None) -> int:
         description="Trova e rimuove foto duplicate dal DB e da photo_folder senza toccare OFFICIAL_TOTAL."
     )
     parser.add_argument("--apply", action="store_true", help="Applica davvero le rimozioni (default: dry-run)")
-    parser.add_argument("--window", type=int, default=60, help="Finestra in secondi per quasi-duplicati dHash (default: 60)")
-    parser.add_argument("--tolerance", type=int, default=3, help="Distanza Hamming massima dHash 256-bit (default: 3)")
+    parser.add_argument("--window", type=int, default=60, help="Finestra in secondi per quasi-duplicati (default: 60)")
+    parser.add_argument("--tolerance", type=int, default=8, help="Distanza Hamming massima pHash 64-bit (default: 8)")
     parser.add_argument("--workers", type=int, default=4, help="Worker paralleli per hashing (default: 4)")
-    parser.add_argument("--db", type=Path, default=DEFAULT_DB, help="Percorso del database SQLite")
-    parser.add_argument("--photos", type=Path, default=DEFAULT_PHOTOS, help="Percorso di photo_folder")
-    parser.add_argument("--cache", type=Path, default=DEFAULT_CACHE, help="Cache SQLite per hash (usa 'none' per disabilitare)")
-    parser.add_argument("--json-report", type=Path, default=None, help="Salva report JSON dei duplicati trovati")
-    parser.add_argument("--show", type=int, default=20, help="Numero di esempi da stampare (default: 20)")
+    parser.add_argument("--db", type=Path, default=DEFAULT_DB)
+    parser.add_argument("--photos", type=Path, default=DEFAULT_PHOTOS)
+    parser.add_argument("--cache", type=Path, default=DEFAULT_CACHE, help="Cache SQLite (usa 'none' per disabilitare)")
+    parser.add_argument("--json-report", type=Path, default=None)
+    parser.add_argument("--show", type=int, default=20)
     args = parser.parse_args(argv)
 
     if not args.db.exists():
@@ -607,7 +581,7 @@ def main(argv: list[str] | None = None) -> int:
     bytes_est = sum(m.removed.size or 0 for m in matches if m.removed.nome_file != m.kept.nome_file)
 
     print(f"Foto in DB: {len(rows)} (presenti su disco: {sum(1 for r in rows if r.exists)})")
-    print(f"Parametri: finestra={args.window}s, tolleranza dHash={args.tolerance}")
+    print(f"Parametri: finestra={args.window}s, tolleranza pHash={args.tolerance}")
     print(f"Duplicati trovati: {len(matches)}")
     for reason, cnt in sorted(by_reason.items()):
         print(f"  - {reason}: {cnt}")
@@ -632,22 +606,10 @@ def main(argv: list[str] | None = None) -> int:
                 "reason": m.reason,
                 "distance": m.distance,
                 "dt_seconds": m.dt_seconds,
-                "removed": {
-                    "id": m.removed.row_id,
-                    "nome_file": m.removed.nome_file,
-                    "utente": m.removed.utente,
-                    "data_ora": m.removed.data_ora,
-                    "punti": m.removed.punti,
-                    "size": m.removed.size,
-                },
-                "kept": {
-                    "id": m.kept.row_id,
-                    "nome_file": m.kept.nome_file,
-                    "utente": m.kept.utente,
-                    "data_ora": m.kept.data_ora,
-                    "punti": m.kept.punti,
-                    "size": m.kept.size,
-                },
+                "removed": {"id": m.removed.row_id, "nome_file": m.removed.nome_file,
+                            "utente": m.removed.utente, "punti": m.removed.punti, "size": m.removed.size},
+                "kept": {"id": m.kept.row_id, "nome_file": m.kept.nome_file,
+                         "utente": m.kept.utente, "punti": m.kept.punti, "size": m.kept.size},
             }
             for m in matches
         ]
@@ -662,8 +624,6 @@ def main(argv: list[str] | None = None) -> int:
     print("\nPulizia applicata:")
     print(f"  Backup SQLite:         {res['backup']}")
     print(f"  Righe log_birre tolte: {res['db_rows_deleted']}")
-    print(f"  Righe media_hash tolte:{res['media_hash_deleted']}")
-    print(f"  Righe attesa tolte:    {res['pending_deleted']}")
     print(f"  File eliminati:        {res['files_deleted']} ({res['bytes_freed'] / (1024 * 1024):.2f} MB)")
     print(f"  OFFICIAL_TOTAL:        {res['official_total']} (invariato)")
     return 0

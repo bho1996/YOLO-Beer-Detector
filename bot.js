@@ -101,6 +101,50 @@ async function caricaHashPerceptuali() {
     console.log(`🔎 ${perceptualHashes.size} image fingerprints loaded`);
 }
 
+// pHash 64-bit (DCT 8x8): robusto a risoluzione/compressione diverse della STESSA foto.
+// Soglia 8: varianti anteprima/HD distanza 0, foto diverse postate a pochi secondi distanza 18+.
+const PHASH_PY = `
+import sys
+import numpy as np
+from PIL import Image
+im = Image.open(sys.argv[1]).convert('L').resize((32, 32))
+a = np.asarray(im, dtype=float)
+x = np.arange(32)
+basis = np.cos(np.pi * (x[:, None] + 0.5) * x[None, :] / 32) * np.sqrt(2 / 32)
+basis[0] /= np.sqrt(2)
+c = basis @ a @ basis.T
+low = c[:8, :8].flatten()[1:]
+med = float(np.median(low))
+bits = 0
+for v in low:
+    bits = (bits << 1) | (1 if v > med else 0)
+print(format(bits, '016x'))
+`;
+const phashMap = new Map();
+const P_HASH_TOLLERANZA = 8;
+
+async function pHash(percorso) {
+    const { stdout } = await execFileAsync(PYTHON_PATH, ['-c', PHASH_PY, percorso], { timeout: 15000 });
+    return stdout.trim();
+}
+
+function eSimilePhash(h, secondi) {
+    for (const [hash, info] of phashMap) {
+        if (secondi >= info.ts &&
+            (secondi - info.ts) < 60 &&
+            distanzaHash(h, hash) <= P_HASH_TOLLERANZA) return true;
+    }
+    return false;
+}
+
+async function caricaPhash() {
+    const righe = await db.all('SELECT hash, nome_file FROM media_phash');
+    for (const r of righe) {
+        const m = /^WA_(\d+)/.exec(String(r.nome_file || ''));
+        phashMap.set(r.hash, { file: r.nome_file, ts: m ? Number(m[1]) : 0 });
+    }
+}
+
 if (!fs.existsSync(CARTELLA_MEDIA)) {
     fs.mkdirSync(CARTELLA_MEDIA);
 }
@@ -435,7 +479,12 @@ async function initDatabase() {
         hash TEXT PRIMARY KEY,
         nome_file TEXT NOT NULL
     )`);
+    await db.run(`CREATE TABLE IF NOT EXISTS media_phash (
+        hash TEXT PRIMARY KEY,
+        nome_file TEXT NOT NULL
+    )`);
     await caricaHashPerceptuali();
+    await caricaPhash();
     console.log('📦 Database SQLite pronto (WAL mode)');
 }
 
@@ -650,12 +699,8 @@ setInterval(async () => {
     console.log(`❤️ Watchdog | ready=${pronto} | coda=${codaAI.length} | busy=${staProcessandoCoda} | silenzio=${minutiSilenzio}m`);
 
     if (!pronto) {
-        erroriSondaConsecutivi = 0;
-        if (tentativiRiconnessione === 0) {
-            console.log('🤔 Client non pronto, provo initialize()...');
-            client.initialize().catch(() => {});
-        }
-        return;
+        console.log('🚨 Client non pronto. Riavvio forzato del processo...');
+        process.exit(1);
     }
 
     // SONDA: se c'è silenzio da 30+ minuti, verifica che la pagina risponda davvero
@@ -822,8 +867,12 @@ if (chat.name !== NOME_GRUPPO_BERSAGLIO) {
                 console.log(`📎 Salvato: ${nome_file}`);
 
                 let hashP = null;
+                let hashQ = null;
                 try { hashP = await dHash(percorso_file); } catch (e) { /* video o file non decodificabile */ }
-                if (hashP !== null && eSimile(hashP, msg.timestamp)) {
+                try { hashQ = await pHash(percorso_file); } catch (e) { /* fallback a dHash */ }
+                const simile = (hashP !== null && eSimile(hashP, msg.timestamp)) ||
+                               (hashQ !== null && eSimilePhash(hashQ, msg.timestamp));
+                if (simile) {
                     fs.unlinkSync(percorso_file);
                     console.log(`♻️ Simile a una foto dell'ultimo minuto: ${nome_file} NON salvata.`);
                     return;
@@ -831,6 +880,10 @@ if (chat.name !== NOME_GRUPPO_BERSAGLIO) {
                 if (hashP !== null) {
                     perceptualHashes.set(hashP, { file: nome_file, ts: msg.timestamp });
                     await db.run('INSERT OR REPLACE INTO media_hash(hash, nome_file) VALUES(?, ?)', [hashP, nome_file]);
+                }
+                if (hashQ !== null) {
+                    phashMap.set(hashQ, { file: nome_file, ts: msg.timestamp });
+                    await db.run('INSERT OR REPLACE INTO media_phash(hash, nome_file) VALUES(?, ?)', [hashQ, nome_file]);
                 }
                 registraMedia(nome_file);
 
