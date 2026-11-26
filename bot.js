@@ -609,6 +609,7 @@ const client = new Client({
         executablePath: '/usr/bin/chromium',
         ignoreHTTPSErrors: true,
         acceptInsecureCerts: true,
+        env: { ...process.env, DBUS_SESSION_BUS_ADDRESS: '', XDG_RUNTIME_DIR: '' },
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--ignore-certificate-errors']
     }
 });
@@ -620,6 +621,18 @@ client.on('qr', (qr) => {
 
 client.on('ready', () => {
     tentativiRiconnessione = 0;
+    if (client.pupBrowser) {
+        client.pupBrowser.once('disconnected', () => {
+            console.log('💥 Browser Chromium disconnesso/crashato. Riavvio immediato...');
+            process.exit(1);
+        });
+    }
+    if (client.pupPage) {
+        client.pupPage.once('close', () => {
+            console.log('💥 Pagina WhatsApp chiusa inattesamente. Riavvio immediato...');
+            process.exit(1);
+        });
+    }
     console.log(`✅ Bot connesso come ${client.info.wid.user}`);
     console.log('✅ In attesa di birre...');
     // Prima istantanea membri dopo 2 minuti (WhatsApp deve finire di caricare le chat),
@@ -695,11 +708,12 @@ setInterval(async () => {
 }, 10 * 60 * 1000);  // controlla ogni 10 minuti se è ora di fare il sync
 setInterval(async () => {
     const pronto = Boolean(client.info);
+    const browserVivo = Boolean(client.pupBrowser && client.pupBrowser.connected);
     const minutiSilenzio = Math.round((Date.now() - ultimoMessaggioVisto) / 60000);
-    console.log(`❤️ Watchdog | ready=${pronto} | coda=${codaAI.length} | busy=${staProcessandoCoda} | silenzio=${minutiSilenzio}m`);
+    console.log(`❤️ Watchdog | ready=${pronto} | browser=${browserVivo} | coda=${codaAI.length} | busy=${staProcessandoCoda} | silenzio=${minutiSilenzio}m`);
 
-    if (!pronto) {
-        console.log('🚨 Client non pronto. Riavvio forzato del processo...');
+    if (!pronto || !browserVivo) {
+        console.log('🚨 Client o browser non pronto. Riavvio forzato del processo...');
         process.exit(1);
     }
 
