@@ -67,7 +67,7 @@ async function share() {
   </div>
 
   <template v-if="entry && prof">
-    <h2 class="section-title mt">{{ entry.flag }} {{ entry.name }} <span class="muted small">{{ entry.nation }}</span></h2>
+    <h2 class="section-title mt">{{ entry.flag }} {{ entry.name }}<span v-if="entry.supporter" title="Project supporter"> 💛</span> <span class="muted small">{{ entry.nation }}</span></h2>
     <div class="grid g4">
       <Kpi label="🏆 Rank" :value="'#' + fmt(entry.rank)" :deltaLabel="`of ${fmt(v.lb.length)} drinkers`" />
       <Kpi label="⭐ Score" :value="fmt(entry.score)" :deltaLabel="gapAbove ? `${fmt(gapAbove.pts)} pts behind ${gapAbove.name}` : '👑 Leader!'" />
@@ -78,7 +78,7 @@ async function share() {
       <div class="card"><h3>📈 Score over time</h3><EChart :option="curveOpt" height="260px" /></div>
       <div class="card">
         <h3>🎖️ Badges</h3>
-        <div class="badges"><span v-for="b in myBadges" :key="b" class="badge">{{ b }}</span></div>
+        <div class="badges"><span v-if="entry.supporter" class="badge">💛 Supporter</span><span v-for="b in myBadges" :key="b" class="badge">{{ b }}</span></div>
         <p class="small muted mt">🕐 Favourite hour: <b>{{ prof.favHour }}:00</b><br />
           🍻 Best day: <b>{{ fmtDay(prof.bestDay) }}</b> ({{ prof.bestPts }} pts)</p>
       </div>

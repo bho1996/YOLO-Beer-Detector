@@ -138,7 +138,7 @@ const updatedAgo = computed(() => {
         <WeeklyTab v-else-if="tab === 'weekly'" :v="view" />
       </section>
 
-      <SupportFooter />
+      <SupportFooter :supporters="data?.supporters" />
     </main>
   </template>
 </template>

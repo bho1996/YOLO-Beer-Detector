@@ -85,6 +85,16 @@ def main():
 
     official = int(row[0]) if row else 0
     aliases = report["aliases"]
+    supporters_path = os.path.join(BASE, "supporters.json")
+    supporters = []
+    if os.path.exists(supporters_path):
+        with open(supporters_path, encoding="utf-8") as f:
+            for raw_sup in json.load(f):
+                val = str(raw_sup).strip()
+                norm = nicknames.get(aliases.get(val, val), aliases.get(val, val))
+                if norm and norm not in supporters:
+                    supporters.append(norm)
+    supporter_set = set(supporters)
     members = []
     for m in members_raw.itertuples():
         raw_name = str(m.utente).strip()
@@ -95,7 +105,8 @@ def main():
         "generated_at": int(time.time()),
         "db_updated_at": int(os.path.getmtime(DB_PATH)),
         "official_total": official,
-        "users": [{"name": r.utente, "nation": r.nation, "flag": flag_of(r.nation)} for r in users.itertuples()],
+        "users": [{"name": r.utente, "nation": r.nation, "flag": flag_of(r.nation), "supporter": r.utente in supporter_set} for r in users.itertuples()],
+        "supporters": supporters,
         "rows": rows,
         "potd": dict(sorted(potd.items())),
         "milestone_snipers": {"65000": str(override[0])} if override else {},

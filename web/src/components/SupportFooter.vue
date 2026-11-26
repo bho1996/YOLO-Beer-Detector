@@ -3,6 +3,15 @@ import { computed } from 'vue'
 import { CONFIG } from '../config'
 import DonateButtons from './DonateButtons.vue'
 
+const props = defineProps<{ supporters?: string[] }>()
+const allSupporters = computed(() => {
+  const out: string[] = []
+  for (const name of [...(props.supporters ?? []), ...CONFIG.supporters]) {
+    if (name && !out.includes(name)) out.push(name)
+  }
+  return out
+})
+
 const funding = computed(() => {
   if (!CONFIG.monthlyCostsEur) return null
   const got = CONFIG.donatedThisMonthEur ?? 0
@@ -24,7 +33,7 @@ const funding = computed(() => {
         <div class="bar mt"><div :style="{ width: funding.pct * 100 + '%' }" /></div>
         <div class="bar-caption"><span>€{{ funding.got }} raised</span><span>€{{ funding.need }} needed</span></div>
       </div>
-      <p v-if="CONFIG.supporters.length" class="small mt">💛 Thanks to: {{ CONFIG.supporters.join(' · ') }}</p>
+      <p v-if="allSupporters.length" class="small mt">💛 Thanks to: {{ allSupporters.join(' · ') }}</p>
     </div>
     <div>
       <DonateButtons source="footer" />

@@ -82,7 +82,7 @@ const deathCols: Col[] = [
   <div v-if="period === 'all' || period === 'month' || period === 'week'" class="card">
     <input v-model="q" type="search" placeholder="🔎 Search a drinker or a country…" style="margin-bottom:12px" />
     <DataTable :cols="lbCols(true)" :rows="filtered" clickable sortable :pageSize="25" @select="r => emit('player', r.u)" />
-    <p class="small muted">{{ board.length.toLocaleString('en-US') }} drinkers · photo = 1 point, down video = 5 points. ↑/↓ = rank change vs the previous period.</p>
+    <p class="small muted">{{ board.length.toLocaleString('en-US') }} drinkers · photo = 1 point, down video = 5 points · 💛 = project supporter. ↑/↓ = rank change vs the previous period.</p>
   </div>
 
   <div v-else-if="period === 'death'" class="card">

@@ -266,8 +266,15 @@ async function allineaTotale(nuovoValore, fonte, utente) {
 // ==========================================
 // SYNC GIT CENTRALIZZATA
 // ==========================================
+let syncPending = false;
+let syncPendingMsg = "🤖 Auto-update: nuove birre";
+
 async function sincronizzaGit(messaggioCommit = "🤖 Auto-update: nuove birre") {
-    if (isSyncing) return;
+    if (isSyncing) {
+        syncPending = true;
+        syncPendingMsg = messaggioCommit;
+        return;
+    }
     isSyncing = true;
     try {
         await db.run('PRAGMA wal_checkpoint(TRUNCATE)');
@@ -285,6 +292,11 @@ async function sincronizzaGit(messaggioCommit = "🤖 Auto-update: nuove birre")
             isSyncing = false;
             if (error) console.log("⚠️ Errore Git:", (stderr || error.message).trim());
             else console.log("🚀 Dashboard aggiornata!");
+            if (syncPending) {
+                const nextMsg = syncPendingMsg;
+                syncPending = false;
+                sincronizzaGit(nextMsg);
+            }
         });
     } catch (e) {
         isSyncing = false;

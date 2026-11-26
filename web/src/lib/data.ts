@@ -2,7 +2,7 @@ import { ref, shallowRef } from 'vue'
 import { CONFIG } from '../config'
 import { dayOf } from './time'
 
-export interface User { name: string; nation: string; flag: string }
+export interface User { name: string; nation: string; flag: string; supporter?: boolean }
 export interface Row {
   id: number
   t: number        // minuti naive Roma
@@ -32,6 +32,7 @@ export interface Dataset {
   milestoneSnipers: Record<string, string>
   members: Member[]
   memberSnapshot: string
+  supporters: string[]
   report: Report
 }
 
@@ -41,6 +42,7 @@ interface RawData {
   milestone_snipers?: Record<string, string>
   members?: Member[]
   member_snapshot?: string
+  supporters?: string[]
   rows: { id: number[]; t: number[]; u: number[]; v: number[]; b: number[]; s: number[]; p: number[]; f: string[] }
 }
 
@@ -56,6 +58,7 @@ function parse(raw: RawData): Dataset {
     users: raw.users, rows, potd: raw.potd, report: raw.report,
     milestoneSnipers: raw.milestone_snipers ?? {},
     members: raw.members ?? [], memberSnapshot: raw.member_snapshot ?? '',
+    supporters: raw.supporters ?? [],
   }
 }
 

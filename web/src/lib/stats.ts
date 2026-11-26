@@ -2,7 +2,7 @@ import type { Row, User, Member } from './data'
 import { dayOf, hourOf, weekdayOf, fmtDay, fmtDateTime, monthKey, dayFromIso, subtractMonths, MIN_PER_DAY } from './time'
 
 export interface LbEntry {
-  rank: number; u: number; name: string; flag: string; nation: string
+  rank: number; u: number; name: string; flag: string; nation: string; supporter: boolean
   score: number; pints: number; downs: number; uploads: number; delta: number
 }
 
@@ -18,7 +18,7 @@ export function leaderboard(rows: Row[], users: User[], referenceRows: Row[] = [
     let e = m.get(r.u)
     if (!e) {
       const us = users[r.u]
-      e = { rank: 0, u: r.u, name: us.name, flag: us.flag, nation: us.nation, score: 0, pints: 0, downs: 0, uploads: 0, delta: 0 }
+      e = { rank: 0, u: r.u, name: us.name, flag: us.flag, nation: us.nation, supporter: Boolean(us.supporter), score: 0, pints: 0, downs: 0, uploads: 0, delta: 0 }
       m.set(r.u, e)
     }
     e.score += r.score
